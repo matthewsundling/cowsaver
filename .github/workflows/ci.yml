@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     # Run on several macOS images to catch source and toolchain regressions. CI exercises
@@ -18,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode 16.2 on macOS 14
         # Tests use Swift Testing, which is supplied by Xcode 16 and later.
@@ -81,7 +84,14 @@ jobs:
     # Regenerate fixtures from cowsay 3.8.4 and require the committed files to match.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Remove unrelated preinstalled tap
+        run: |
+          tap_directory="$(brew --repository)/Library/Taps/aws/homebrew-tap"
+          if [ -d "$tap_directory" ]; then
+            brew untap aws/tap
+          fi
 
       - name: Install cowsay
         run: brew install cowsay
