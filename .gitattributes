@@ -1,0 +1,7 @@
+# Golden files are compared against real cowsay byte-for-byte, trailing whitespace
+# included. Cowfiles carry meaningful trailing whitespace too (see stegosaurus.cow).
+# `-text` disables all end-of-line normalisation so git never rewrites a single byte
+# of either.
+Tests/CowsayKitTests/Golden/** -text
+Resources/cows/**             -text
+Resources/fortunes/**         -text

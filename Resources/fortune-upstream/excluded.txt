@@ -1,0 +1,26 @@
+# Quotes suppressed from display.
+#
+# Cowsaver skips these records at load time. The text stays in the data files, so those
+# files still match upstream byte-for-byte and manifest.tsv still verifies -- but the
+# quote is never shown.
+#
+# Format, one per line:
+#     <16-hex-char id>    # YYYY-MM-DD  reason
+#
+# The ID is the first 16 hex characters of the SHA-256 of the record's exact text with
+# trailing whitespace stripped. To find the ID for a quote:
+#
+#     cowsaver-cli --fortune-id "the exact text of the quote"
+#
+# Anyone may request a removal, for any of these reasons, without having to argue for it:
+#
+#   * the quote is misattributed
+#   * the quote is misquoted
+#   * it is material you hold rights to and do not want redistributed
+#   * it is harmful in a way upstream did not anticipate
+#
+# See provenance.md. Open an issue on the repository.
+#
+# Nothing is excluded yet. That is not a claim that this database is free of
+# misattribution -- upstream states plainly that its attributions cannot be verified.
+# It only means nobody has told us about a specific one.

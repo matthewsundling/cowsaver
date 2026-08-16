@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Cowsaver</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.matthewsundling.cowsaver.app</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Cowsaver</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Cowsaver code: GPLv3. Third-party notices: Contents/Resources.</string>
+
+	<!--
+	  The `.app` and `.saver` have separate bundle identifiers and preference domains.
+
+	  The app is not sandboxed: `--idle` reads system-wide input idle time and display-sleep
+	  assertions, and the app can inspect content imported into the screensaver container.
+	-->
+
+	<key>CowsaverBuildOSVersion</key>
+	<string>__BUILD_OS__</string>
+	<key>CowsaverBuildCLTVersion</key>
+	<string>__BUILD_CLT__</string>
+	<key>CowsaverSwiftVersion</key>
+	<string>__BUILD_SWIFT__</string>
+	<key>CowsaverGitCommit</key>
+	<string>__BUILD_COMMIT__</string>
+</dict>
+</plist>

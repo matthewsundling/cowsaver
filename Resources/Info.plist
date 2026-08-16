@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Cowsaver</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.matthewsundling.cowsaver</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Cowsaver</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<!--
+	  This is the technical deployment floor, set by TARGET_TRIPLE in the Makefile. It is
+	  not a statement that every intervening macOS release has been tested; documented
+	  test coverage belongs in docs/compatibility.md.
+	-->
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Cowsaver code: GPLv3. Third-party notices: Contents/Resources.</string>
+
+	<!--
+	  Swift includes a class's module in its Objective-C runtime name. The screensaver host
+	  therefore instantiates CowsaverSaver.CowsaverView, not CowsaverView.
+
+	  An @objc(CowsaverView) annotation could instead provide an unmangled name, but the
+	  module-qualified name keeps the bundle declaration aligned with the Swift type. CI
+	  loads the built bundle to verify this value.
+	-->
+	<key>NSPrincipalClass</key>
+	<string>CowsaverSaver.CowsaverView</string>
+
+	<!--
+	  Build provenance, stamped by the Makefile.
+
+	  `make doctor` reads these values from an installed saver. They make a support report
+	  reproducible by recording the OS, Command Line Tools, Swift compiler, and source
+	  revision that produced the bundle.
+	-->
+	<key>CowsaverBuildOSVersion</key>
+	<string>__BUILD_OS__</string>
+	<key>CowsaverBuildCLTVersion</key>
+	<string>__BUILD_CLT__</string>
+	<key>CowsaverSwiftVersion</key>
+	<string>__BUILD_SWIFT__</string>
+	<key>CowsaverGitCommit</key>
+	<string>__BUILD_COMMIT__</string>
+</dict>
+</plist>

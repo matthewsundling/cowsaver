@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+build/
+*.saver
+*.app
+*.zip
+.DS_Store
+Package.resolved

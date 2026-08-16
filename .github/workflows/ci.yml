@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Run on several macOS images to catch source and toolchain regressions. CI exercises
+    # bundle loading and offscreen rendering, but cannot run System Settings' screensaver UI.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment
+        run: |
+          sw_vers
+          uname -m
+          swift --version
+          xcode-select -p
+
+      - name: Lints
+        # Check the rendering-framework and portable-core boundaries before building.
+        run: make check
+
+      - name: Test
+        run: swift test
+
+      - name: Build the screensaver bundle
+        run: make saver
+
+      - name: Build the standalone app
+        run: make app
+
+      - name: Verify the bundle loads and its principal class resolves
+        # Loading the bundle verifies that its principal class resolves; compilation alone
+        # does not exercise this Info.plist requirement.
+        run: |
+          cat > /tmp/loadtest.swift <<'EOF'
+          import AppKit
+          import Foundation
+          let path = CommandLine.arguments[1]
+          guard let bundle = Bundle(path: path) else { print("FAIL: not a bundle"); exit(1) }
+          guard bundle.load() else { print("FAIL: bundle.load() returned false"); exit(1) }
+          guard let cls = bundle.principalClass else {
+              print("FAIL: principalClass is nil - this is the blank grey screensaver")
+              exit(1)
+          }
+          guard cls is NSView.Type else { print("FAIL: not an NSView subclass"); exit(1) }
+          print("OK: \(cls)")
+          EOF
+          swiftc -o /tmp/loadtest /tmp/loadtest.swift
+          /tmp/loadtest build/Cowsaver.saver
+
+      - name: Verify the fail-safe render path
+        # The compiled fallback must render when bundled resources are unavailable.
+        run: |
+          cp -R build/Cowsaver.app /tmp/Stripped.app
+          rm -rf /tmp/Stripped.app/Contents/Resources
+          mkdir -p /tmp/neutral && cd /tmp/neutral
+          /tmp/Stripped.app/Contents/MacOS/Cowsaver --render-to-png /tmp/stripped.png
+          test -s /tmp/stripped.png
+
+      - name: Doctor
+        run: make doctor
+
+  fidelity:
+    # Regenerate fixtures from cowsay 3.8.4 and require the committed files to match.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cowsay
+        run: brew install cowsay
+
+      - name: Regenerate the goldens and require zero diff
+        run: |
+          if ! cowsay --version 2>&1 | grep -q "version 3.8.4"; then
+            echo "::warning::Homebrew's cowsay is no longer 3.8.4; skipping regeneration."
+            cowsay --version
+            exit 0
+          fi
+          make golden
+          if ! git diff --quiet -- Tests/CowsayKitTests/Golden; then
+            echo "::error::Regenerating from real cowsay changed the committed goldens."
+            git diff --stat -- Tests/CowsayKitTests/Golden
+            exit 1
+          fi
+          echo "goldens reproduce exactly from cowsay 3.8.4"
