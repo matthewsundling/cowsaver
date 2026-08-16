@@ -2,6 +2,8 @@
 
 **A `fortune | cowsay` screensaver for macOS. Native Swift, zero dependencies, low idle activity.**
 
+Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundling).
+
 *The cows and fortunes are other people’s work. This project is a renderer and screensaver shell.* See [credits.md](credits.md).
 
 ```text

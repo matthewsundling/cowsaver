@@ -1,5 +1,7 @@
 # Licence notice
 
+Copyright © 2026 C. Matthew Sundling.
+
 The repository-root `LICENSE` applies to Cowsaver's original source code and project-authored documentation, except where a file says otherwise.
 
 Bundled cowsay cowfiles are third-party material under GPLv3; their notice and provenance are in `Resources/cows/`.
