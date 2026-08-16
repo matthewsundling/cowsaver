@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode 16.2 on macOS 14
+        # Tests use Swift Testing, which is supplied by Xcode 16 and later.
+        if: matrix.os == 'macos-14'
+        run: sudo xcode-select --switch /Applications/Xcode_16.2.app/Contents/Developer
+
       - name: Environment
         run: |
           sw_vers
