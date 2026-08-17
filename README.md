@@ -21,6 +21,14 @@ Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundli
                 ||     ||
 ```
 
+## Screenshots
+
+![Cowsaver in green-phosphor, with the classic cowsay cow](docs/images/cowsaver-green-phosphor.png)
+
+![Cowsaver in amber](docs/images/cowsaver-amber.png)
+
+![Cowsaver in paperwhite](docs/images/cowsaver-paperwhite.png)
+
 ## What it includes
 
 - **Cowsaver.saver** — a native macOS `fortune | cowsay` screensaver, built with Xcode Command Line Tools.
