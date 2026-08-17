@@ -6,6 +6,18 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Added
 
+- Screenshots of the green-phosphor, amber, and paperwhite themes in the README.
+- Public issue and pull-request templates, a Code of Conduct, and a security-reporting policy.
+
+### Changed
+
+- CI now runs on macOS 14, 15, and the current GitHub-hosted macOS image; its fidelity job fails clearly if Homebrew no longer supplies cowsay 3.8.4.
+- Compatibility documentation records the macOS 26 Tahoe 26.4.1 Options-sheet and timer-activation rendering failures, and the absence of Swift Testing in a fresh Tahoe Command Line Tools installation.
+
+## [1.0] - 2026-08-15
+
+### Added
+
 - `Cowsaver.saver`: a native macOS `fortune | cowsay` screensaver with one application-managed content-rotation timer and no continuous application render loop.
 - `Cowsaver.app`: a standalone development, offscreen-rendering, and manual-fullscreen companion app; it is not a lock-screen screensaver.
 - `CowsayKit`: a Foundation-only Swift implementation of cowsay 3.8.4 behavior, with `cowsaver-cli` for command-line comparison.

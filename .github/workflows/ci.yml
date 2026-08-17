@@ -99,9 +99,9 @@ jobs:
       - name: Regenerate the goldens and require zero diff
         run: |
           if ! cowsay --version 2>&1 | grep -q "version 3.8.4"; then
-            echo "::warning::Homebrew's cowsay is no longer 3.8.4; skipping regeneration."
+            echo "::error::Homebrew's cowsay is no longer 3.8.4; cannot verify the pinned fixtures."
             cowsay --version
-            exit 0
+            exit 1
           fi
           make golden
           if ! git diff --quiet -- Tests/CowsayKitTests/Golden; then

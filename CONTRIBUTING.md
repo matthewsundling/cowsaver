@@ -1,6 +1,6 @@
 # Contributing
 
-Patches are welcome. This guide explains the project constraints contributors should preserve and the checks that support them.
+Patches are welcome. This guide explains the project constraints contributors should preserve and the checks that support them. Participation in the project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Build and test
 
@@ -61,3 +61,7 @@ Match the surrounding code. Comments should explain non-obvious behavior and con
 ## Reporting compatibility
 
 If you build or run Cowsaver on a macOS version not listed in [docs/compatibility.md](docs/compatibility.md), please add a row. `make doctor` prints the information needed for a useful report.
+
+## Security reports
+
+Do not open a public issue for a suspected security vulnerability. Follow the reporting instructions in [SECURITY.md](SECURITY.md).

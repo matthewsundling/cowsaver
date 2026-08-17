@@ -222,6 +222,8 @@ Regenerating the committed golden output requires cowsay 3.8.4 (`brew install co
 | [Platform risks](docs/platform-risk.md)                      | The Apple APIs Cowsaver relies on and its fallback paths.    |
 | [Credits](credits.md)                                        | Attribution and licensing for the code, cowfiles, and fortune material. |
 | [Contributing](CONTRIBUTING.md)                              | Development rules and contribution guidance.                 |
+| [Code of Conduct](CODE_OF_CONDUCT.md)                        | Community standards and a private reporting route.           |
+| [Security policy](SECURITY.md)                               | Supported versions and private vulnerability reporting.      |
 | [Curated fortune provenance](Resources/fortune-curated/provenance.md) | Runtime corpus, curation record, licence, and removals. |
 | [Source-import provenance](Resources/fortune-upstream/provenance.md) | Source, licence, and checksum information for the preserved fortune-mod import. |
 
