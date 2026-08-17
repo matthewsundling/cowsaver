@@ -32,7 +32,7 @@ Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundli
 ## What it includes
 
 - **Cowsaver.saver** — a native macOS `fortune | cowsay` screensaver, built with Xcode Command Line Tools.
-- **3,493 curated fortunes** and 47 static cowsay cowfiles, with upstream material and attribution preserved separately.
+- **3,470 curated fortunes** and 47 static cowsay cowfiles, with upstream material and attribution preserved separately.
 - **CowsayKit** — a pure-Swift cowsay-compatible rendering core, tested against committed output from cowsay 3.8.4; no Perl or subprocess is required.
 - **Cowsaver.app** — a standalone development and fallback app. It is not a lock-screen screensaver.
 - **Low idle activity** — Cowsaver renders when its content rotates rather than running a continuous animation loop.
@@ -163,11 +163,11 @@ A few cowsay details are easy to miss:
 
 ## Content and licensing
 
-Cowsaver displays 3,493 curated fortunes from `fortune-mod` 9708 and 47 static cowfiles from cowsay 3.8.4. It does not execute Perl embedded in cowfiles, so the four cowsay templates that require it are not included.
+Cowsaver displays 3,470 curated fortunes from `fortune-mod` 9708 and 47 static cowfiles from cowsay 3.8.4. It does not execute Perl embedded in cowfiles, so the four cowsay templates that require it are not included.
 
 | Content | What it means | Licence |
 |---|---|---|
-| Curated fortunes | 3,493 records used at runtime | BSD terms recorded with fortune-mod |
+| Curated fortunes | 3,470 records used at runtime | BSD terms recorded with fortune-mod |
 | Static cowfiles | 47 bundled cowsay templates | GPLv3 |
 | Preserved source import | 35 files, 13,387 separator entries, 13,353 non-empty records; repository provenance only | BSD terms recorded with fortune-mod |
 

@@ -11,6 +11,7 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- The curated runtime corpus now excludes 23 records using body-size, weight, dieting, calorie, fattening, or appetite humor; it contains 3,470 fortunes.
 - CI now runs on macOS 14, 15, and the current GitHub-hosted macOS image; its fidelity job fails clearly if Homebrew no longer supplies cowsay 3.8.4.
 - Compatibility documentation records the macOS 26 Tahoe 26.4.1 Options-sheet and timer-activation rendering failures, and the absence of Swift Testing in a fresh Tahoe Command Line Tools installation.
 

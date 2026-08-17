@@ -111,7 +111,7 @@ struct BundledFortuneTests {
     }
 
     @Test func hasTheExpectedCuratedRecordCount() {
-        #expect(Self.database.fortunes.count == 3_493,
+        #expect(Self.database.fortunes.count == 3_470,
                 "got \(Self.database.fortunes.count)")
     }
 

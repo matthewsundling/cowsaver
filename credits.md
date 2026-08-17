@@ -25,7 +25,7 @@ Several cowfiles depict recognizable characters or marks. Cowsaver is not affili
 
 ## fortune-mod quotations
 
-Cowsaver's 3,493-record runtime corpus is a curated subset of the `fortune-mod` 9708 database. The full 35-file import is preserved in `Resources/fortune-upstream/` for source verification, but is not part of an installed Cowsaver bundle and is never a runtime search path.
+Cowsaver's 3,470-record runtime corpus is a curated subset of the `fortune-mod` 9708 database. The full 35-file import is preserved in `Resources/fortune-upstream/` for source verification, but is not part of an installed Cowsaver bundle and is never a runtime search path.
 
 The fortune-mod database is redistributed under the BSD terms recorded in `Resources/fortune-curated/license.txt` and `Resources/fortune-upstream/LICENSE`. The data source, count definitions, curation record, and removal process are in `Resources/fortune-curated/provenance.md`; import checksums and source-package provenance are in `Resources/fortune-upstream/provenance.md`.
 
