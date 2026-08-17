@@ -35,7 +35,7 @@ The core keeps byte-level text handling because cowsay counts bytes rather than 
 
 ## Build system
 
-`Package.swift` defines the core, command-line tool, app, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Xcode Command Line Tools are sufficient.
+`Package.swift` defines the core, command-line tool, app, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Xcode Command Line Tools are sufficient to build the products. The test suite also requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 
 The screensaver and app link the shared modules statically. This avoids a runtime dynamic-library lookup from a bundle loaded by the sandboxed screensaver host.
 

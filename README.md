@@ -37,7 +37,7 @@ Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundli
 - **Cowsaver.app** — a standalone development and fallback app. It is not a lock-screen screensaver.
 - **Low idle activity** — Cowsaver renders when its content rotates rather than running a continuous animation loop.
 
-Built with a macOS 13.0 deployment target. Verified on macOS Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9; other releases are not yet verified. See [compatibility notes](docs/compatibility.md).
+Built with a macOS 13.0 deployment target. Verified on macOS Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9. macOS 26 Tahoe 26.4.1 was tested on Apple silicon but is not currently supported: the Options sheet does not open and timer-based activation can clip content. See [compatibility notes](docs/compatibility.md).
 
 ## Install
 
@@ -192,7 +192,9 @@ Personal fortune files are UTF-8 plain-text files with no filename extension. Se
 
 ## Building
 
-Cowsaver requires Xcode Command Line Tools; it does not require the full Xcode app or an `.xcodeproj`.
+Cowsaver builds with Xcode Command Line Tools; it does not require the full Xcode app or an `.xcodeproj` to build and install the saver.
+
+`make test` requires a Swift toolchain that includes Swift Testing. On a fresh macOS 26.4.1 installation, Command Line Tools 26.6 did not provide it; see [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 
 ```sh
 make check

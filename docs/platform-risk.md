@@ -21,7 +21,7 @@ This document lists the Apple APIs Cowsaver depends on, the effect of a failure,
 - WKWebView is unnecessary for the bundled content and would add a browser rendering surface.
 - Quartz Composer is deprecated and is not needed for rotation-based content updates.
 - CryptoKit would make `CowsayKit` Apple-specific; the core includes its own SHA-256 implementation.
-- XCTest requires the full Xcode toolchain; tests use swift-testing so Command Line Tools are sufficient.
+- Cowsaver's tests use Swift Testing rather than XCTest. The products build with Command Line Tools, but the test suite requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 - Apple has not published a public App Extension replacement for legacy screensavers.
 - An `.xcodeproj` is not required by the Package.swift and Makefile build.
 

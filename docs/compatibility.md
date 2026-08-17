@@ -12,13 +12,13 @@ Third-party macOS screensavers use a deprecated surface. This document records w
 | Sequoia 15.7.7 | Tested | Screensaver and preview work. |
 | Sequoia 15.7.8 | Tested | Screensaver and preview work. Development machine: 24G824, x86_64, Swift 6.1.2 Command Line Tools. |
 | Sequoia 15.7.9 | Tested | Screensaver and preview work. |
-| macOS 26 Tahoe | Not yet tested | No Cowsaver compatibility claim. |
+| macOS 26 Tahoe 26.4.1 | Tested; not supported | On Apple silicon, Cowsaver builds, installs, and can be selected, but the Options sheet does not open and timer-based activation can clip content. See [#1](https://github.com/matthewsundling/cowsaver/issues/1) and [#2](https://github.com/matthewsundling/cowsaver/issues/2). |
 
 The project began on an Intel MacBook Pro with dual graphics, but Cowsaver makes no hardware-specific compatibility claim.
 
 ## Compatibility posture
 
-macOS 26 Tahoe has not been tested, so this project makes no Tahoe-specific behavior claims. The configuration file is the supported configuration path on tested systems; the Options sheet is a convenience.
+macOS 26 Tahoe 26.4.1 has been tested on Apple silicon, but Cowsaver is not currently supported there because of the failures recorded above. The configuration file is the supported configuration path on tested systems; the Options sheet is a convenience. A fresh Tahoe Command Line Tools installation could build and install Cowsaver but could not run `make test` because it lacked Swift Testing; see [#4](https://github.com/matthewsundling/cowsaver/issues/4).
 
 ## System Settings
 
