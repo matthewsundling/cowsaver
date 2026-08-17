@@ -1,14 +1,14 @@
 # curated fortune provenance
 
-This directory is Cowsaver's runtime quote corpus: 3,493 selected records derived from the preserved `fortune-mod` 9708 import in `../fortune-upstream/`.
+This directory is Cowsaver's runtime quote corpus: 3,470 selected records derived from the preserved `fortune-mod` 9708 import in `../fortune-upstream/`.
 
 | Count | Meaning |
 |---|---|
 | 13,387 | Separator-delimited entries in the 35-file upstream import, including 34 empty entries. |
 | 13,353 | Non-empty upstream records represented by `curation.tsv`. |
-| 3,493 | Final curated records in `fortunes`; all load and display at the default settings. |
+| 3,470 | Final curated records in `fortunes`; all load and display at the default settings. |
 
-`curation.tsv` has one row for each non-empty source record. Its `retain` rows are exactly the records in `fortunes`; all other rows are excluded with a recorded reason. `final-corpus-trim` identifies records omitted when the initial editorial selection was reduced to the final runtime corpus.
+`curation.tsv` has one row for each non-empty source record. It records whether each source record was retained or excluded, with a reason; its retain-row count matches the records in `fortunes`. `final-corpus-trim` identifies records omitted when the initial editorial selection was reduced to the final runtime corpus. The `body-size-weight-or-diet-humor` reason identifies 23 records removed in the 2026-08-16 content pass; it covers jokes and wordplay about body size, weight, dieting, calories, fattening, and appetite.
 
 ## Licence and attribution
 
