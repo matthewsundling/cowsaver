@@ -83,12 +83,29 @@ public final class CowsaverEngine {
     ///   knows it. Given one, the wrap width is chosen to fill it — see `AdaptiveWrap`.
     ///   Without one this renders once at the configured width, as used by the CLI and
     ///   compatibility fixtures.
-    public func nextBlock(fitting canvas: AdaptiveWrap.Canvas? = nil) -> String {
+    /// - Parameter preview: ask for `previewBlock` instead of a fortune, for a host preview
+    ///   pane too small to show one honestly.
+    public func nextBlock(fitting canvas: AdaptiveWrap.Canvas? = nil,
+                          preview: Bool = false) -> String {
+        if preview { return Self.previewBlock }
         let fortune = fortunePicker.next()?.text ?? BuiltIn.fortunes[0]
         let cow = fixedCow ?? cowPicker.next() ?? BuiltIn.defaultCow
         let block = bestBlock(fortune: fortune, cow: cow, canvas: canvas)
         return block.isEmpty ? fallbackBlock() : block
     }
+
+    /// Compact deterministic content for a host preview pane.
+    ///
+    /// A pane a few hundred points across cannot render a 60-line fortune at a readable size,
+    /// so it is not asked to. Built once from the compiled-in cow rather than the configured
+    /// corpus: a preview draws a single frame and never joins the rotation timer, so it must
+    /// not spend a pick from the no-repeat selectors or vary with what loaded from disk.
+    /// Eight rows by 36 columns, inside the 12 by 40 a preview is budgeted.
+    static let previewBlock = String(
+        decoding: CowRenderer.render(message: "Cowsaver: a fortune-telling cow.",
+                                     cowfile: BuiltIn.defaultCow),
+        as: UTF8.self
+    )
 
     /// Render `fortune` in `cow` at whichever candidate wrap width fills `canvas` best.
     private func bestBlock(fortune: String, cow: Cowfile,

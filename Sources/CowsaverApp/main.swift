@@ -101,7 +101,6 @@ if case .renderPNG(let path, let size) = mode {
     let configuration = loadConfiguration()
     let engine = makeEngine(configuration, seed: 1)
 
-    // Top-level code runs on the main thread, which is what `ImageRenderer` requires;
     // Top-level code runs on the main thread, satisfying ImageRenderer's main-actor requirement.
     let rendered = MainActor.assumeIsolated {
         let canvas = Layout.canvas(theme: Theme(configuration: configuration), in: size)

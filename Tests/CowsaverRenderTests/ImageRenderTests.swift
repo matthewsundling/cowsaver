@@ -169,10 +169,13 @@ struct ImageRenderTests {
         #expect(ImageRenderer.render(block: "", configuration: Configuration(), size: size) != nil)
     }
 
-    @Test func tinyCanvasDoesNotCrash() {
-        let result = ImageRenderer.render(block: sampleBlock(), configuration: Configuration(),
-                                          size: CGSize(width: 8, height: 8))
-        #expect(result != nil)
+    /// The 8x8 case that used to log `textFrame=144.492x83.8125@0,0` — a layer eighteen times
+    /// the width of its view. Containment is asserted more broadly in `ContainmentTests`.
+    @Test func tinyCanvasDoesNotCrash() throws {
+        let tiny = CGSize(width: 8, height: 8)
+        let result = try #require(ImageRenderer.render(block: sampleBlock(),
+                                                       configuration: Configuration(), size: tiny))
+        #expect(CGRect(origin: .zero, size: tiny).contains(result.textFrame))
     }
 }
 

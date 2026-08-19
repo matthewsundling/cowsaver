@@ -14,7 +14,13 @@ import Foundation
 public enum ImageRenderer {
     public struct Result {
         public let image: NSBitmapImageRep
+        /// What the view drew, taken from the view, not computed a second time here.
+        ///
+        /// A second computation can agree with itself while the view does something else, so
+        /// a test could pass on layout the screen never saw.
         public let metrics: LayoutMetrics
+        /// The frame the view gave its text layer, in view coordinates.
+        public let textFrame: CGRect
     }
 
     /// Main-actor bound because this builds an `NSView` and renders its layer tree. The
@@ -31,11 +37,6 @@ public enum ImageRenderer {
         view.present(block, animated: false)
         view.layoutSubtreeIfNeeded()
 
-        let theme = Theme(configuration: configuration)
-        let metrics = configuration.fontSize > 0
-            ? Layout.metrics(block: block, theme: theme, fontSize: CGFloat(configuration.fontSize))
-            : Layout.fit(block: block, theme: theme, in: size)
-
         guard let representation = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
@@ -50,7 +51,8 @@ public enum ImageRenderer {
         view.layer?.render(in: context.cgContext)
         NSGraphicsContext.restoreGraphicsState()
 
-        return Result(image: representation, metrics: metrics)
+        return Result(image: representation, metrics: view.presentedMetrics,
+                      textFrame: view.presentedTextFrame)
     }
 
     @MainActor

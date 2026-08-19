@@ -85,10 +85,23 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     public override func startAnimation() {
         super.startAnimation()
         logGeometry("startAnimation")
-        rotate()   // always show something immediately, preview or not
 
         // A preview renders its first frame but does not join the shared rotation timer.
-        guard !effectivelyPreview else { return }
+        guard !effectivelyPreview else {
+            rotate()   // System Settings expects a thumbnail right away
+            return
+        }
+
+        // Defer the first fit by one runloop turn.
+        //
+        // A host that finalises geometry just after startAnimation returns would otherwise
+        // have its content fitted to a placeholder size — the leading hypothesis for the
+        // clipping on timer activation in issue #2. The content view re-fits on later
+        // geometry signals as well; this catches the case where none arrives.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isAnimating, self.window != nil else { return }
+            self.rotate()
+        }
         registerForRotation()
     }
 
@@ -117,8 +130,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         guard let content, let engine else { return }
         // Rendering is fallible only through missing optional state; leave the existing frame
         // in place if the view has already been detached.
-        content.present(engine.nextBlock(fitting: content.canvas),
-                        animated: !effectivelyPreview)
+        let preview = effectivelyPreview
+        content.present(engine.nextBlock(fitting: content.canvas, preview: preview),
+                        animated: !preview)
     }
 
     private func registerForRotation() {
