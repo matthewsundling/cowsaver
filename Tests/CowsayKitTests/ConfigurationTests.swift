@@ -15,6 +15,19 @@ struct ConfigurationTests {
         #expect(configuration.cowfiles == ["stegosaurus", "default", "tux", "dragon"])
         #expect(configuration.foreground == "#33FF66")   // green phosphor
         #expect(configuration.fontSize == 0)             // auto-fit
+        #expect(!configuration.debugFrame)
+    }
+
+    @Test func debugFrameLoadsFromJSON() {
+        let result = load("{\"debugFrame\": true}")
+        #expect(result.configuration.debugFrame)
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func debugFrameWrongTypeKeepsTheDefault() {
+        let result = load("{\"debugFrame\": \"yes\"}")
+        #expect(!result.configuration.debugFrame)
+        #expect(result.warnings.contains { $0.contains("debugFrame") })
     }
 
     @Test func readsAFullConfigFile() {
@@ -23,7 +36,7 @@ struct ConfigurationTests {
          "face": "tired", "balloonStyle": "think", "fontName": "Monaco", "fontSize": 18,
          "foreground": "#FFB000", "background": "#101010", "transition": "none",
          "reposition": false, "adaptiveWrap": false, "maxFortuneLines": 30,
-         "weightByFile": true}
+         "weightByFile": true, "debugFrame": true}
         """)
         let c = result.configuration
         #expect(result.warnings.isEmpty)
@@ -35,6 +48,7 @@ struct ConfigurationTests {
         #expect(!c.adaptiveWrap)
         #expect(c.maxFortuneLines == 30)
         #expect(c.weightByFile)
+        #expect(c.debugFrame)
     }
 
     // MARK: Invalid and partial input
@@ -183,6 +197,7 @@ struct ConfigurationTests {
         configuration.adaptiveWrap = false
         configuration.maxFortuneLines = 30
         configuration.weightByFile = true
+        configuration.debugFrame = true
 
         let result = Configuration.load(object: configuration.jsonObject)
         #expect(result.configuration == configuration)
@@ -223,7 +238,7 @@ struct ConfigurationTests {
     @Test func knownKeysCoverEveryConfigurableField() {
         // If a field is added without adding its key, ScreenSaverDefaults silently stops
         // being able to set it.
-        #expect(Configuration.knownKeys.count == 16)
+        #expect(Configuration.knownKeys.count == 17)
         #expect(Set(Configuration.knownKeys).count == Configuration.knownKeys.count)
     }
 }

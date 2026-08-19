@@ -16,6 +16,44 @@ func emit(_ bytes: ByteString) {
     FileHandle.standardOutput.write(Data(bytes))
 }
 
+// MARK: - Config validation
+
+func printValidation(_ result: Configuration.LoadResult) {
+    if result.warnings.isEmpty {
+        emit(Bytes.from("ok\n"))
+    } else {
+        for warning in result.warnings { emit(Bytes.from("\(warning)\n")) }
+    }
+}
+
+/// `--validate-config`: the same loader the saver uses, so a warning here is a warning
+/// there. A missing or unreadable file is only an error when the caller named it
+/// explicitly; searching the default locations and finding nothing is normal.
+func validateConfig(path: String?) -> Never {
+    if let path {
+        guard let data = FileManager.default.contents(atPath: path) else {
+            fail("no config file at \(path)")
+        }
+        printValidation(Configuration.load(data: data))
+        exit(0)
+    }
+
+    emit(Bytes.from("config search order:\n"))
+    var found: URL?
+    for directory in ResourceLocations.supportDirectories() {
+        let candidate = directory.appendingPathComponent("config.json")
+        let exists = FileManager.default.fileExists(atPath: candidate.path)
+        if exists, found == nil { found = candidate }
+        emit(Bytes.from("  \(exists ? "*" : " ") \(candidate.path)\n"))
+    }
+    guard let found, let data = FileManager.default.contents(atPath: found.path) else {
+        emit(Bytes.from("no config file found; the saver uses built-in defaults\n"))
+        exit(0)
+    }
+    printValidation(Configuration.load(data: data))
+    exit(0)
+}
+
 // MARK: - Cow search path
 
 func defaultCowDirectories() -> [URL] {
@@ -86,11 +124,23 @@ while index < arguments.count {
 
         Usage: cowsaver-cli [-bdgpstwy] [-f <cowfile>] [-e <eyes>] [-T <tongue>]
                             [-W <columns>] [-n] [--think] [--cowdir <dir>] [message]
+               cowsaver-cli --validate-config [path]
 
         Reads the message from stdin when none is given as arguments.
 
+        --validate-config [path] checks a config.json for warnings instead of rendering
+        anything. With no path, it searches the same locations the screensaver does.
+
         """))
         exit(0)
+    }
+    if argument == "--validate-config" {
+        var path: String?
+        if index + 1 < arguments.count, !arguments[index + 1].hasPrefix("-") {
+            index += 1
+            path = arguments[index]
+        }
+        validateConfig(path: path)
     }
 
     // Getopt::Std allows bundling, so -bdg is three flags.

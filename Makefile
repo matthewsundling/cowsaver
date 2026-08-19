@@ -127,11 +127,18 @@ doctor:
 	@echo "cowsay:          $$(cowsay --version 2>&1 | head -1 || echo 'not installed')"
 	@if [ -d "$(INSTALL_DIR)/$(SAVER)" ]; then \
 		echo "installed saver: $(INSTALL_DIR)/$(SAVER)"; \
-		for k in CowsaverBuildOSVersion CowsaverBuildCLTVersion CowsaverSwiftVersion CowsaverGitCommit CFBundleShortVersionString; do \
+		for k in CowsaverBuildOSVersion CowsaverBuildCLTVersion CowsaverSwiftVersion CowsaverGitCommit CFBundleShortVersionString LSMinimumSystemVersion; do \
 			printf '  %-28s %s\n' "$$k" "$$(defaults read "$(INSTALL_DIR)/$(SAVER)/Contents/Info" $$k 2>/dev/null || echo '-')"; \
 		done; \
 	else \
 		echo "installed saver: none (run 'make install')"; \
+	fi
+	@echo "config:"
+	@cli="$$(ls .build/*/cowsaver-cli 2>/dev/null | head -1)"; \
+	if [ -n "$$cli" ]; then \
+		"$$cli" --validate-config | sed 's/^/  /'; \
+	else \
+		echo "  run 'make cli' for config validation"; \
 	fi
 
 cli: check

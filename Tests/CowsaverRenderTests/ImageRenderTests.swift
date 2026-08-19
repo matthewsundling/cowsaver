@@ -131,6 +131,40 @@ struct ImageRenderTests {
         #expect(sawAmber, "no amber pixels found; the theme did not reach the text layer")
     }
 
+    /// E2: `debugFrame` draws a red border on the view bounds and a contrasting blue
+    /// border on the text layer, so a screenshot can tell a host-geometry bug from a
+    /// layout bug apart. `CALayer.render(in:)` happens to draw `borderWidth`/
+    /// `borderColor`, unlike some other layer effects (shadows, masks), so this can
+    /// assert directly on pixels rather than only on the flag's plumbing.
+    @Test func debugFrameDrawsBorderColouredPixels() throws {
+        var configuration = Configuration()
+        configuration.debugFrame = true
+        let result = try #require(ImageRenderer.render(block: sampleBlock(),
+                                                        configuration: configuration, size: size))
+
+        var sawRedBoundsEdge = false
+        for x in stride(from: 0, to: result.image.pixelsWide, by: 4) {
+            if let colour = result.image.colorAt(x: x, y: 0),
+               colour.redComponent > 0.8, colour.greenComponent < 0.2, colour.blueComponent < 0.2 {
+                sawRedBoundsEdge = true
+                break
+            }
+        }
+        #expect(sawRedBoundsEdge, "no red border found on the view bounds edge")
+
+        var sawBlueTextBorder = false
+        for x in stride(from: 0, to: result.image.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: result.image.pixelsHigh, by: 2) {
+                if let colour = result.image.colorAt(x: x, y: y),
+                   colour.blueComponent > 0.8, colour.redComponent < 0.2, colour.greenComponent < 0.2 {
+                    sawBlueTextBorder = true
+                }
+            }
+            if sawBlueTextBorder { break }
+        }
+        #expect(sawBlueTextBorder, "no blue border found around the text layer")
+    }
+
     @Test func emptyBlockDoesNotCrash() {
         #expect(ImageRenderer.render(block: "", configuration: Configuration(), size: size) != nil)
     }
