@@ -23,20 +23,31 @@ public protocol RotationClient: AnyObject {
 ///
 /// Active views share one timer; detached views are pruned on the next tick. Explicit
 /// teardown stops the timer immediately when the last client leaves.
+///
+/// Each client keeps the interval it asked for, and the timer runs at the shortest one any
+/// live client wants. The host process outlives individual views, so that figure is derived
+/// from the current membership rather than accumulated across it.
 public final class RotationCoordinator {
     public static let shared = RotationCoordinator()
 
     private final class WeakClient {
         weak var value: RotationClient?
-        init(_ value: RotationClient) { self.value = value }
+        var interval: TimeInterval
+        init(_ value: RotationClient, interval: TimeInterval) {
+            self.value = value
+            self.interval = interval
+        }
     }
+
+    /// Used while no live client asks for anything shorter.
+    private static let defaultInterval: TimeInterval = 45
 
     private let lock = NSLock()
     private let queue = DispatchQueue(label: "com.matthewsundling.cowsaver.rotation",
                                       qos: .utility)
     private var timer: DispatchSourceTimer?
     private var clients: [WeakClient] = []
-    private var interval: TimeInterval = 45
+    private var interval: TimeInterval = RotationCoordinator.defaultInterval
 
     /// Whether `rotate()` is delivered on the main queue.
     ///
@@ -60,30 +71,50 @@ public final class RotationCoordinator {
         return timer != nil
     }
 
+    /// The interval the timer runs at: the shortest one any live client asked for.
+    public var effectiveInterval: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return interval
+    }
+
     // MARK: Registration
 
     public func register(_ client: RotationClient, interval: TimeInterval) {
         lock.lock()
         prune()
-        if !clients.contains(where: { $0.value === client }) {
-            clients.append(WeakClient(client))
+        if let existing = clients.first(where: { $0.value === client }) {
+            existing.interval = interval
+        } else {
+            clients.append(WeakClient(client, interval: interval))
         }
-        // The shortest interval any client asked for wins; they all rotate together.
-        self.interval = clients.isEmpty ? interval : min(self.interval, interval)
+        let changed = recomputeInterval()
         let shouldStart = timer == nil && !clients.isEmpty
+        let running = changed ? timer : nil
+        let seconds = self.interval
         lock.unlock()
 
-        if shouldStart { startTimer() }
+        if shouldStart {
+            startTimer()
+        } else if let running {
+            schedule(running, every: seconds)
+        }
     }
 
     /// Safe to call repeatedly from each lifecycle path that can detach a view.
     public func unregister(_ client: RotationClient) {
         lock.lock()
         clients.removeAll { $0.value === client || $0.value == nil }
+        let changed = recomputeInterval()
         let shouldStop = clients.isEmpty
+        let running = changed ? timer : nil
+        let seconds = self.interval
         lock.unlock()
 
-        if shouldStop { stopTimer() }
+        if shouldStop {
+            stopTimer()
+        } else if let running {
+            schedule(running, every: seconds)
+        }
     }
 
     // MARK: Timer
@@ -93,15 +124,24 @@ public final class RotationCoordinator {
         guard timer == nil else { lock.unlock(); return }
         let seconds = interval
         let source = DispatchSource.makeTimerSource(queue: queue)
-        // Generous leeway lets the OS coalesce our wakeups with others already scheduled.
-        // At a 45-second interval, five seconds of slack does not affect readability.
-        source.schedule(deadline: .now() + seconds,
-                        repeating: seconds,
-                        leeway: .seconds(5))
+        schedule(source, every: seconds)
         source.setEventHandler { [weak self] in self?.tick() }
         timer = source
         lock.unlock()
         source.resume()
+    }
+
+    /// Set the shared timer's cadence, on a new source or a running one.
+    ///
+    /// Generous leeway lets the OS coalesce our wakeups with others already scheduled. At a
+    /// 45-second interval, five seconds of slack does not affect readability.
+    ///
+    /// Scheduling a running source again restarts its phase, so a changed interval also moves
+    /// the next rotation to roughly one full interval from now.
+    private func schedule(_ source: DispatchSourceTimer, every seconds: TimeInterval) {
+        source.schedule(deadline: .now() + seconds,
+                        repeating: seconds,
+                        leeway: .seconds(5))
     }
 
     private func stopTimer() {
@@ -118,10 +158,16 @@ public final class RotationCoordinator {
         prune()
         let live = clients.compactMap(\.value).filter(\.isLive)
         let empty = live.isEmpty
+        let changed = recomputeInterval()
+        let running = changed ? timer : nil
+        let seconds = interval
         lock.unlock()
 
         // Stop the timer when pruning leaves no live clients.
         guard !empty else { stopTimer(); return }
+
+        // Pruning can lengthen the effective interval; the running timer follows it.
+        if let running { schedule(running, every: seconds) }
 
         let work = { for client in live where client.isLive { client.rotate() } }
         if deliversOnMain { DispatchQueue.main.async(execute: work) } else { work() }
@@ -130,5 +176,21 @@ public final class RotationCoordinator {
     /// Caller holds the lock.
     private func prune() {
         clients.removeAll { $0.value == nil || $0.value?.isLive == false }
+    }
+
+    /// Caller holds the lock. The shortest interval any live client asked for wins; they all
+    /// rotate together. Nothing survives an empty membership, so the interval a later
+    /// registration asks for takes effect on its own terms.
+    ///
+    /// Returns whether the effective interval changed.
+    private func recomputeInterval() -> Bool {
+        let requested = clients.compactMap { client -> TimeInterval? in
+            guard let value = client.value, value.isLive else { return nil }
+            return client.interval
+        }
+        let updated = requested.min() ?? RotationCoordinator.defaultInterval
+        guard updated != interval else { return false }
+        interval = updated
+        return true
     }
 }

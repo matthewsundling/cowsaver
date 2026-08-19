@@ -165,6 +165,11 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
             self.configuration = updated
             self.content?.apply(configuration: updated)
             self.rebuildEngine()
+            // Re-register so a changed rotation interval takes effect in this host process,
+            // which outlives the view that first registered one.
+            if self.isRegistered {
+                RotationCoordinator.shared.register(self, interval: updated.rotationInterval)
+            }
             self.rotate()
         }
         self.sheet = sheet   // the host does not retain it for us

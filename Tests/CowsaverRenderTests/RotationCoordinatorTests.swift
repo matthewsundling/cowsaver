@@ -114,4 +114,50 @@ struct RotationCoordinatorTests {
         coordinator.tick()
         #expect(!coordinator.isRunning)
     }
+
+    // MARK: Effective interval
+
+    /// The screensaver host outlives the views it creates. A short interval from an earlier
+    /// activation must not survive into a later one that asks for a longer one.
+    @Test func aDepartedClientLeavesNoIntervalBehind() {
+        let coordinator = RotationCoordinator(deliverOnMain: false)
+        let first = TestClient()
+        coordinator.register(first, interval: 5)
+        #expect(coordinator.effectiveInterval == 5)
+
+        coordinator.unregister(first)
+        let second = TestClient()
+        coordinator.register(second, interval: 40)
+
+        #expect(coordinator.effectiveInterval == 40, "the departed client still set the pace")
+    }
+
+    /// Pruning is a membership change like any other, so it also lengthens the interval again.
+    @Test func pruningAShortIntervalClientRestoresTheLongerInterval() {
+        let coordinator = RotationCoordinator(deliverOnMain: false)
+        let patient = TestClient()
+        let hurried = TestClient()
+        coordinator.register(patient, interval: 40)
+        coordinator.register(hurried, interval: 5)
+        #expect(coordinator.effectiveInterval == 5)
+
+        hurried.isLive = false
+        coordinator.tick()
+
+        #expect(coordinator.effectiveInterval == 40)
+        #expect(coordinator.clientCount == 1)
+    }
+
+    /// A view whose settings changed re-registers rather than creating a second client.
+    @Test func reRegisteringTheSameClientUpdatesItsInterval() {
+        let coordinator = RotationCoordinator(deliverOnMain: false)
+        let client = TestClient()
+        coordinator.register(client, interval: 5)
+        #expect(coordinator.effectiveInterval == 5)
+
+        coordinator.register(client, interval: 40)
+
+        #expect(coordinator.effectiveInterval == 40)
+        #expect(coordinator.clientCount == 1)
+    }
 }

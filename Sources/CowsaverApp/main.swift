@@ -6,13 +6,14 @@ import Foundation
 // Cowsaver.app — the standalone front end.
 //
 // `--window` supports interactive development, `--render-to-png` drives offscreen rendering
-// tests, and `--fullscreen` provides manual display. This target imports no ScreenSaver APIs
-// and does not participate in screen lock.
+// tests, `--configure` edits the shared settings, and `--fullscreen` provides manual display.
+// This target imports no ScreenSaver APIs and does not participate in screen lock.
 
 enum Mode {
     case window
     case fullscreen
     case idle(TimeInterval)
+    case configure
     case renderPNG(path: String, size: CGSize)
 }
 
@@ -44,6 +45,8 @@ while index < arguments.count {
             fail("--idle expects a positive number of seconds")
         }
         mode = .idle(seconds)
+    case "--configure":
+        mode = .configure
     case "--render-to-png":
         let path = nextValue("--render-to-png")
         mode = .renderPNG(path: path, size: CGSize(width: 1280, height: 800))
@@ -51,13 +54,14 @@ while index < arguments.count {
         print("""
         Cowsaver — a fortune | cowsay screensaver
 
-        Usage: Cowsaver [--window | --fullscreen | --idle SECONDS]
+        Usage: Cowsaver [--window | --fullscreen | --idle SECONDS | --configure]
 
           --window            windowed, for development (default)
           --fullscreen        cover every screen now
           --idle SECONDS      wait for the user to go idle, then cover every screen.
                               Skips activation while anything holds a display-sleep
                               assertion, so it will not cover a video.
+          --configure         open the settings window and write config.json
 
         Configuration lives in a JSON file, not in this binary. See the README.
 
@@ -127,6 +131,7 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
     private var eventMonitor: Any?
     private var idleTimer: DispatchSourceTimer?
     private var isShowing = false
+    private var settings: ConfigurationSheet?
 
     init(mode: Mode) {
         self.mode = mode
@@ -140,6 +145,7 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         switch mode {
         case .window:
             NSApp.setActivationPolicy(.regular)
+            installMenu()
             showWindowed()
         case .fullscreen:
             NSApp.setActivationPolicy(.accessory)
@@ -148,6 +154,14 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
             // Remain an accessory app until the idle threshold is reached.
             NSApp.setActivationPolicy(.accessory)
             startIdleWatch(threshold: threshold)
+        case .configure:
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            // Leave the launch callback before running a modal loop in it.
+            DispatchQueue.main.async { [weak self] in
+                self?.presentSettings()
+                NSApp.terminate(nil)
+            }
         case .renderPNG:
             break   // handled above
         }
@@ -230,6 +244,60 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         window.contentView = view
         windows.append(window)
         views.append(view)
+    }
+
+    // MARK: Settings
+
+    /// A menu bar, so the settings window has a keyboard route in windowed mode.
+    private func installMenu() {
+        let appMenu = NSMenu()
+        let settingsItem = appMenu.addItem(withTitle: "Settings…",
+                                           action: #selector(showSettings),
+                                           keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Cowsaver",
+                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        let menu = NSMenu()
+        menu.addItem(appItem)
+        NSApp.mainMenu = menu
+    }
+
+    @objc private func showSettings() { presentSettings() }
+
+    /// The shared sheet, shown as an ordinary window. Running it modally matches how its
+    /// Cancel and OK buttons close it when it has no sheet parent.
+    private func presentSettings() {
+        let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
+            self?.applySaved(updated)
+        }
+        settings = sheet   // nothing else retains it while it is on screen
+        sheet.window.center()
+        sheet.window.makeKeyAndOrderFront(nil)
+        NSApp.runModal(for: sheet.window)
+        settings = nil
+    }
+
+    /// Write the settings, then bring this process into line with them.
+    private func applySaved(_ updated: Configuration) {
+        if let error = ConfigurationSheet.persist(updated) {
+            FileHandle.standardError.write(Data("cowsaver: \(error)\n".utf8))
+            return
+        }
+        print(ResourceLocations.canonicalConfigurationURL().path)
+
+        configuration = updated
+        for view in views { view.apply(configuration: updated) }
+        // Settings that change which content is loaded need a new engine, not just a redraw.
+        engine = makeEngine(updated, seed: UInt64.random(in: 0 ..< .max))
+        // Re-registering an existing client updates the interval it rotates at.
+        if isLive {
+            RotationCoordinator.shared.register(self, interval: updated.rotationInterval)
+        }
+        rotate()
     }
 
     // MARK: Idle watching

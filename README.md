@@ -119,7 +119,7 @@ surgery             turkey              turtle              tux
 vader               vader-koala         www
 ```
 
-The config file overrides settings saved by the Options sheet. Invalid values fall back to their defaults without preventing the screensaver from running.
+The screensaver's Options sheet and the app's settings window are two views of the same window, and both write `config.json` — there is no second store. Invalid values fall back to their defaults without preventing the screensaver from running.
 
 ## The standalone app
 
@@ -130,7 +130,10 @@ make app
 ./build/Cowsaver.app/Contents/MacOS/Cowsaver --window
 ./build/Cowsaver.app/Contents/MacOS/Cowsaver --fullscreen
 ./build/Cowsaver.app/Contents/MacOS/Cowsaver --idle 300
+./build/Cowsaver.app/Contents/MacOS/Cowsaver --configure
 ```
+
+`--configure` opens Cowsaver's settings and writes `config.json`. It is the same window the screensaver shows behind its Options button, reached without going through the screensaver host, so settings stay editable when that host does not present one.
 
 `--idle 300` waits for five minutes of idleness before showing Cowsaver. It checks idle state every five seconds and normally avoids activation while macOS reports a display-sleep assertion, such as while a film is playing.
 
