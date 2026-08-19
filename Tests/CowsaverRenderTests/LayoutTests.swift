@@ -132,6 +132,20 @@ struct LayoutTests {
         #expect(metrics.fontSize == 24)
         #expect(metrics.textSize.width > 0)
     }
+
+    /// Pins the figure quoted on `AdaptiveWrap.Canvas.cellAspectRatio`. Auto-fit assumes a
+    /// cell roughly half as wide as it is tall; a face that violated that would quietly
+    /// change every fitted font size. Returns early where Menlo is absent — the fallback
+    /// chain deliberately permits other faces.
+    @Test func menloCellAspectRatioMatchesTheDocumentedValue() throws {
+        guard NSFont(name: "Menlo", size: 100) != nil else { return }
+        var configuration = Configuration()
+        configuration.fontName = "Menlo"
+        let canvas = try #require(Layout.canvas(theme: Theme(configuration: configuration),
+                                                 in: CGSize(width: 1440, height: 900)))
+        #expect(abs(canvas.cellAspectRatio - 0.52) < 0.01,
+                "Menlo cell aspect is \(canvas.cellAspectRatio)")
+    }
 }
 
 @Suite("Theme")

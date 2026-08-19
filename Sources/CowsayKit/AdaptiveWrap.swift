@@ -14,12 +14,18 @@ import Foundation
 ///
 /// The renderer tries a small, fixed set of widths once per content rotation.
 public enum AdaptiveWrap {
-    /// The shape of the space a block has to fill, given as ratios rather than points so the
-    /// decision can be made in Foundation-only code that has never heard of a screen.
+    /// The shape of the space a block has to fill.
+    ///
+    /// Given as ratios rather than points so the decision can be made in Foundation-only code
+    /// that has never heard of a screen.
     public struct Canvas: Equatable, Sendable {
         /// Drawable width ÷ height.
         public let aspectRatio: Double
-        /// One character cell's width ÷ height in the render font. About 0.52 for Menlo.
+        /// One character cell's width ÷ height in the render font.
+        ///
+        /// Around 0.5 for the monospaced faces `Theme.font` resolves to — 0.52 for Menlo,
+        /// the default, which `LayoutTests` pins. Monaco is nearer 0.45, so a fallback
+        /// changes the fitted size a little; it does not change the arithmetic.
         public let cellAspectRatio: Double
 
         public init(aspectRatio: Double, cellAspectRatio: Double) {
@@ -33,10 +39,11 @@ public enum AdaptiveWrap {
 
     /// Widest line and line count, in characters.
     ///
-    /// Counting characters rather than bytes is right here and wrong inside the renderer:
-    /// cowsay wraps by byte, but a text layer draws glyphs. For the ASCII this project
-    /// actually emits the two agree, and where they would not, the fortune filter has
-    /// already removed the record.
+    /// Characters, not bytes, and the split is deliberate: `WordWrap` and `Balloon` count
+    /// bytes because cowsay 3.8.4 does (see `Bytes`), while measuring for display counts
+    /// characters because a text layer draws glyphs. For the ASCII this project actually
+    /// emits the two agree, and where they would not, the fortune filter has already
+    /// removed the record.
     public static func gridSize(of block: String) -> (columns: Int, rows: Int) {
         var columns = 0
         var rows = 0
