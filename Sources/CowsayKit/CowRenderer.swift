@@ -14,8 +14,10 @@ public enum Message {
         return lines
     }
 
-    /// `@message = join(' ', @ARGV)` — note this is a single-element array, so a message
-    /// given as arguments never contains a newline.
+    /// `@message = join(' ', @ARGV)`.
+    ///
+    /// Note this is a single-element array, so a message given as arguments never contains
+    /// a newline.
     public static func linesFromArguments(_ arguments: [String]) -> [ByteString] {
         guard !arguments.isEmpty else { return [] }
         return [Bytes.from(arguments.joined(separator: " "))]

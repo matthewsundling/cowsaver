@@ -11,10 +11,8 @@ public struct LayoutMetrics: Equatable {
 public enum Layout {
     /// Widest line and line count, in characters.
     ///
-    /// Counting characters rather than bytes is right *here* and wrong inside `CowsayKit`:
-    /// cowsay wraps by byte, but a text layer draws glyphs. For the ASCII the renderer
-    /// actually emits the two agree, and where they would not, the fortune filter has
-    /// already removed the record.
+    /// Forwards to `AdaptiveWrap.gridSize`, which documents why display measurement counts
+    /// characters while cowsay-compatible wrapping counts bytes.
     public static func measure(_ block: String) -> (columns: Int, rows: Int) {
         AdaptiveWrap.gridSize(of: block)
     }
