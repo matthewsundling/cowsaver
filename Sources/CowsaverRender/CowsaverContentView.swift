@@ -69,7 +69,7 @@ public final class CowsaverContentView: NSView {
     /// A 1 px border on the view's own layer (bounds) and a contrasting one on the text
     /// layer.
     ///
-    /// So a screenshot can tell a host-geometry bug from a layout bug apart. Off by
+    /// A screenshot can then tell a host-geometry bug from a layout bug. Off by
     /// default; when off, rendering is unchanged (`borderWidth` is already `0` on a fresh
     /// `CALayer`).
     ///
