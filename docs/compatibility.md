@@ -18,7 +18,7 @@ The project began on an Intel MacBook Pro with dual graphics, but Cowsaver makes
 
 ## Compatibility posture
 
-macOS 26 Tahoe 26.4.1 has been tested on Apple silicon, but Cowsaver is not currently supported there because of the failures recorded above. The configuration file is the supported configuration path on tested systems; the Options sheet is a convenience. A fresh Tahoe Command Line Tools installation could build and install Cowsaver but could not run `make test` because it lacked Swift Testing; see [#4](https://github.com/matthewsundling/cowsaver/issues/4).
+macOS 26 Tahoe 26.4.1 has been tested on Apple silicon, but Cowsaver is not currently supported there because of the failures recorded above. The configuration file is the supported configuration path on tested systems; the Options sheet is a convenience. A fresh Tahoe Command Line Tools installation could build and install Cowsaver but could not run `make test` because it lacked Swift Testing; `make test` now reports that limitation clearly, and `make smoke` provides the framework-free golden verification path. See [#4](https://github.com/matthewsundling/cowsaver/issues/4).
 
 ## System Settings
 
