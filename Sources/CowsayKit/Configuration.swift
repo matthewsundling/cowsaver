@@ -91,7 +91,7 @@ public struct Configuration: Equatable, Sendable {
     public var weightByFile: Bool = false
     /// Draws a border on the view bounds and a contrasting one on the text layer.
     ///
-    /// Tells host-geometry bugs from layout bugs apart in a screenshot. Config-file only;
+    /// Tells host-geometry bugs from layout bugs in a screenshot. Config-file only;
     /// not exposed in the Options sheet.
     public var debugFrame: Bool = false
 

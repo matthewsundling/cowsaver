@@ -255,9 +255,8 @@ public struct FortuneDatabase: Sendable {
         return FortuneDatabase(fortunes: fortunes, statistics: statistics, weights: weights)
     }
 
-    /// Documentation and metadata that live alongside the data.
-    ///
-    /// Must never be parsed as quotes.
+    /// Documentation and metadata that live alongside the data and must never be parsed
+    /// as quotes.
     static let metadataFilenames: Set<String> = [
         "LICENSE", "COPYING", "README", "NOTES", "CREDITS", "MANIFEST", "PROVENANCE",
     ]

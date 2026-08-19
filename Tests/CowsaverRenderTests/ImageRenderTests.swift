@@ -133,7 +133,7 @@ struct ImageRenderTests {
 
     /// E2: `debugFrame` draws a red border on the view bounds and a contrasting blue
     /// border on the text layer, so a screenshot can tell a host-geometry bug from a
-    /// layout bug apart. `CALayer.render(in:)` happens to draw `borderWidth`/
+    /// layout bug. `CALayer.render(in:)` happens to draw `borderWidth`/
     /// `borderColor`, unlike some other layer effects (shadows, masks), so this can
     /// assert directly on pixels rather than only on the flag's plumbing.
     @Test func debugFrameDrawsBorderColouredPixels() throws {

@@ -142,7 +142,7 @@ struct LayoutTests {
         var configuration = Configuration()
         configuration.fontName = "Menlo"
         let canvas = try #require(Layout.canvas(theme: Theme(configuration: configuration),
-                                                 in: CGSize(width: 1440, height: 900)))
+                                                in: CGSize(width: 1440, height: 900)))
         #expect(abs(canvas.cellAspectRatio - 0.52) < 0.01,
                 "Menlo cell aspect is \(canvas.cellAspectRatio)")
     }

@@ -38,10 +38,10 @@ public final class RotationCoordinator {
     private var clients: [WeakClient] = []
     private var interval: TimeInterval = 45
 
-    /// Tests drive `tick()` directly.
+    /// Whether `rotate()` is delivered on the main queue.
     ///
-    /// The callbacks need to land synchronously rather than on a main queue that is not
-    /// running.
+    /// Tests drive `tick()` directly and need the callbacks to land synchronously rather
+    /// than on a main queue that is not running.
     private let deliversOnMain: Bool
 
     public init(deliverOnMain: Bool = true) {
