@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 5 3 * *'
 
 permissions:
   contents: read
@@ -41,6 +43,9 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Golden smoke suite
+        run: make smoke
 
       - name: Build the screensaver bundle
         run: make saver

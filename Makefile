@@ -40,7 +40,7 @@ KIT_FORBIDDEN   := AppKit|Cocoa|ScreenSaver|CoreGraphics|QuartzCore|SwiftUI
 
 IMPORT_RE       := ^[[:space:]]*(@_exported[[:space:]]+)?import[[:space:]]+
 
-.PHONY: all saver app cli test check golden import-fortunes install uninstall doctor clean
+.PHONY: all saver app cli test smoke check golden import-fortunes install uninstall doctor clean
 
 all: saver app
 
@@ -145,7 +145,15 @@ cli: check
 	$(SWIFT) build --product cowsaver-cli -c $(CONFIG)
 
 test: check
+	@if ! echo 'import Testing' | $(SWIFTC) -typecheck - >/dev/null 2>&1; then \
+		echo "==> test: Swift Testing is not available in this toolchain."; \
+		echo "    Install Xcode or a swift.org toolchain, or run 'make smoke' for the framework-free golden suite."; \
+		exit 1; \
+	fi
 	$(SWIFT) test
+
+smoke: cli
+	scripts/run-goldens.sh "$(BIN)"
 
 # Architectural checks run before every build.
 check:
