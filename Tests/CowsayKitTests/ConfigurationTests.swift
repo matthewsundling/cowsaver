@@ -345,4 +345,24 @@ struct EngineTests {
         let engine = CowsaverEngine(configuration: Configuration(), seed: 5)
         for _ in 0 ..< 50 { #expect(!engine.nextBlock().isEmpty) }
     }
+
+    /// A preview pane gets content sized for it, and the same content every time.
+    ///
+    /// The budget is what a System Settings thumbnail can show at a readable size; identical
+    /// blocks prove the preview never spends a pick from the rotation it does not join.
+    @Test func previewContentFitsTheThumbnailBudget() {
+        let engine = CowsaverEngine(
+            configuration: Configuration(),
+            cowDirectories: [resources.appendingPathComponent("cows")],
+            fortuneDirectories: [resources.appendingPathComponent("fortune-curated")],
+            seed: 6
+        )
+        let block = engine.nextBlock(preview: true)
+        let grid = AdaptiveWrap.gridSize(of: block)
+        #expect(grid.rows <= 12, "\(grid.rows) rows")
+        #expect(grid.columns <= 40, "\(grid.columns) columns")
+        #expect(block.contains("^__^"), "the classic cow should be recognisable")
+        #expect(engine.nextBlock(preview: true) == block, "preview content must not vary")
+        #expect(engine.nextBlock(preview: true) == block)
+    }
 }

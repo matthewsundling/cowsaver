@@ -80,6 +80,41 @@ public enum Layout {
         )
     }
 
+    /// Scale `metrics` down until the block fits `bounds`, ignoring the floor `fit` applies.
+    ///
+    /// Containment is the overriding invariant. At the 6 pt floor a worst-case block still
+    /// overflows a Settings preview pane, and an oversized layer is what pins content at the
+    /// origin and clips it (issue #3). The floor keeps its meaning as the preferred minimum
+    /// wherever there is room for it; this pass engages only where the old path would have
+    /// overflowed. `margin` matches `fit`'s so a contained block keeps the same breathing
+    /// room as one that fitted normally.
+    public static func contained(
+        _ metrics: LayoutMetrics,
+        in bounds: CGSize,
+        margin: CGFloat = 0.10
+    ) -> LayoutMetrics {
+        let available = CGSize(width: bounds.width * (1 - margin),
+                               height: bounds.height * (1 - margin))
+        guard available.width > 0, available.height > 0,
+              metrics.textSize.width > 0, metrics.textSize.height > 0 else { return metrics }
+        guard metrics.textSize.width > available.width
+                || metrics.textSize.height > available.height else { return metrics }
+
+        let ratio = min(available.width / metrics.textSize.width,
+                        available.height / metrics.textSize.height)
+        // A font size of exactly zero asks AppKit for its *default* size, which would restore
+        // the overflow this pass exists to remove. Only an underflow can reach that.
+        guard metrics.fontSize * ratio > 0 else { return metrics }
+
+        return LayoutMetrics(
+            fontSize: metrics.fontSize * ratio,
+            textSize: CGSize(width: metrics.textSize.width * ratio,
+                             height: metrics.textSize.height * ratio),
+            columns: metrics.columns,
+            rows: metrics.rows
+        )
+    }
+
     /// Metrics for a size the user pinned explicitly (`fontSize` other than 0).
     public static func metrics(block: String, theme: Theme, fontSize: CGFloat) -> LayoutMetrics {
         let (columns, rows) = measure(block)

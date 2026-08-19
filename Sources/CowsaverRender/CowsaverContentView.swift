@@ -27,6 +27,19 @@ public final class CowsaverContentView: NSView {
     private var randomGenerator: SplitMix64
     /// The most recent block, so a resize can re-fit without asking for new content.
     private var currentBlock: String = ""
+    /// The bounds the current frame was fitted to, so a geometry signal that moved nothing
+    /// re-presents nothing.
+    private var presentedBounds: CGSize?
+
+    /// The metrics the last `present` used, and the frame it gave the text layer. Zero until
+    /// something has been presented.
+    ///
+    /// `ImageRenderer` and the tests read what was drawn instead of computing it a second
+    /// time. A second computation can agree with itself while the view does something else,
+    /// which is the one thing an offscreen rendering test must not miss.
+    public private(set) var presentedMetrics = LayoutMetrics(fontSize: 0, textSize: .zero,
+                                                             columns: 0, rows: 0)
+    public private(set) var presentedTextFrame: CGRect = .zero
 
     public init(frame: NSRect, configuration: Configuration, seed: UInt64) {
         self.configuration = configuration
@@ -98,10 +111,13 @@ public final class CowsaverContentView: NSView {
     public func present(_ block: String, animated: Bool) {
         currentBlock = block
 
+        // An explicitly pinned size is an explicit choice, so only auto-fit is contained; a
+        // pinned size that cannot fit is clipped inside its own layer instead. See `frame(for:)`.
         let metrics = configuration.fontSize > 0
             ? Layout.metrics(block: block, theme: theme,
                              fontSize: CGFloat(configuration.fontSize))
-            : Layout.fit(block: block, theme: theme, in: bounds.size)
+            : Layout.contained(Layout.fit(block: block, theme: theme, in: bounds.size),
+                               in: bounds.size)
 
         let font = theme.font(ofSize: metrics.fontSize)
         let paragraph = NSMutableParagraphStyle()
@@ -114,14 +130,20 @@ public final class CowsaverContentView: NSView {
             .paragraphStyle: paragraph,
         ])
 
+        let textFrame = frame(for: metrics)
+
         // Update content and geometry without implicit animations; the optional fade below
         // is the only transition associated with a rotation.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         textLayer.string = attributed
-        textLayer.frame = frame(for: metrics)
+        textLayer.frame = textFrame
         CATransaction.commit()
         applyDebugFrame()   // re-present must not lose the border set at init/apply
+
+        presentedMetrics = metrics
+        presentedTextFrame = textFrame
+        presentedBounds = bounds.size
 
         if animated, configuration.wantsTransition {
             let fade = CABasicAnimation(keyPath: "opacity")
@@ -137,8 +159,14 @@ public final class CowsaverContentView: NSView {
     }
 
     /// A new random position inside a safe inset, or centred if repositioning is off.
+    ///
+    /// The size is clamped to the view. A layer larger than its bounds is what leaves the
+    /// slack below at zero, pinning the block at the origin and clipping it at the top and
+    /// right; clamped, an oversized block is centred and clips inside its own layer instead.
+    /// Auto-fit has already been contained, so the clamp only bites on a pinned `fontSize`.
     private func frame(for metrics: LayoutMetrics) -> CGRect {
-        let size = metrics.textSize
+        let size = CGSize(width: min(metrics.textSize.width, bounds.width),
+                          height: min(metrics.textSize.height, bounds.height))
         guard configuration.reposition else {
             return CGRect(x: (bounds.width - size.width) / 2,
                           y: (bounds.height - size.height) / 2,
@@ -163,7 +191,36 @@ public final class CowsaverContentView: NSView {
         let oldSize = bounds.size
         super.setFrameSize(newSize)
         log("setFrameSize old=\(Self.format(oldSize)) new=\(Self.format(newSize))")
-        if !currentBlock.isEmpty { present(currentBlock, animated: false) }
+        refitIfBoundsChanged()
+    }
+
+    /// Re-fit from the layout pass too.
+    ///
+    /// A host can attach this view at a placeholder size and settle its real geometry by a
+    /// path that never calls `setFrameSize` — the leading hypothesis for the clipping on
+    /// timer activation in issue #2. Every such path still runs a layout pass.
+    public override func layout() {
+        super.layout()
+        refitIfBoundsChanged()
+    }
+
+    /// Re-fit and re-scale when the backing store changes.
+    ///
+    /// Moving between displays changes the scale the text layer rasterises at, and can arrive
+    /// alongside new bounds. Both matter to a view whose entire content is text.
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        if let scale = window?.backingScaleFactor { textLayer.contentsScale = scale }
+        refitIfBoundsChanged()
+    }
+
+    /// Re-present the current block, but only where the geometry actually moved.
+    ///
+    /// `layout()` fires far more often than the bounds change, and re-presenting identical
+    /// geometry would redraw and re-log for nothing.
+    private func refitIfBoundsChanged() {
+        guard !currentBlock.isEmpty, bounds.size != presentedBounds else { return }
+        present(currentBlock, animated: false)
     }
 
     private func log(_ message: String) {
