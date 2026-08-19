@@ -194,7 +194,7 @@ Personal fortune files are UTF-8 plain-text files with no filename extension. Se
 
 Cowsaver builds with Xcode Command Line Tools; it does not require the full Xcode app or an `.xcodeproj` to build and install the saver.
 
-`make test` probes for Swift Testing before invoking `swift test` and prints a clear installation message when the toolchain does not include it. Command Line Tools-only users can run `make smoke` for the framework-free 219-fixture golden suite.
+When `swift test` fails because the toolchain does not provide Swift Testing, `make test` explains the cause and the remedy instead of stopping at the raw compiler error. Command Line Tools-only users can run `make smoke` for the framework-free 219-fixture golden suite.
 
 ```sh
 make check

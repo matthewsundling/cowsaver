@@ -144,13 +144,19 @@ doctor:
 cli: check
 	$(SWIFT) build --product cowsaver-cli -c $(CONFIG)
 
+# Diagnose after failure rather than probing first: a bare `swiftc -typecheck` probe
+# cannot see the module paths SwiftPM wires up, so it rejects toolchains whose
+# `swift test` works (CLT 6.1.2 bundles swift-testing; the standalone probe still fails).
 test: check
-	@if ! echo 'import Testing' | $(SWIFTC) -typecheck - >/dev/null 2>&1; then \
-		echo "==> test: Swift Testing is not available in this toolchain."; \
+	@log="$$(mktemp)"; \
+	{ $(SWIFT) test 2>&1; echo "$$?" > "$$log.status"; } | tee "$$log"; \
+	status="$$(cat "$$log.status")"; \
+	if [ "$$status" -ne 0 ] && grep -q "no such module 'Testing'" "$$log"; then \
+		echo "==> test: this toolchain does not provide Swift Testing to 'swift test'."; \
 		echo "    Install Xcode or a swift.org toolchain, or run 'make smoke' for the framework-free golden suite."; \
-		exit 1; \
-	fi
-	$(SWIFT) test
+	fi; \
+	rm -f "$$log" "$$log.status"; \
+	exit "$$status"
 
 smoke: cli
 	scripts/run-goldens.sh "$(BIN)"
