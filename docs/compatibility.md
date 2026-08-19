@@ -28,5 +28,6 @@ On the tested Sequoia releases, Screen Saver is reached from System Settings →
 
 1. Run `make doctor` and include its output in a report; it identifies the environment that built the installed saver.
 2. Rebuild from source on the affected Mac if practical: `make clean && make install`.
-3. Use the standalone app as a temporary fallback: `./build/Cowsaver.app/Contents/MacOS/Cowsaver --idle 300`. It shares the renderer but does not integrate with screen lock.
-4. Open an issue with the `make doctor` output and add a row above.
+3. To tell a host geometry bug from a layout bug, set `"debugFrame": true` in `config.json` and take a screenshot: it draws a red border on the view bounds and a blue border on the text layer.
+4. Use the standalone app as a temporary fallback: `./build/Cowsaver.app/Contents/MacOS/Cowsaver --idle 300`. It shares the renderer but does not integrate with screen lock.
+5. Open an issue with the `make doctor` output and add a row above.

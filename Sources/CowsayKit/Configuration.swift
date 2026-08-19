@@ -1,7 +1,8 @@
 import Foundation
 
-/// A colour, kept here rather than in the AppKit layer so it can be parsed and tested
-/// without a window server.
+/// A colour, kept here rather than in the AppKit layer.
+///
+/// This lets it be parsed and tested without a window server.
 public struct ThemeColor: Equatable, Sendable {
     public let red: Double, green: Double, blue: Double
 
@@ -88,6 +89,11 @@ public struct Configuration: Equatable, Sendable {
     /// How tall a fortune may be, in lines wrapped at `wrapWidth`. `0` means no limit.
     public var maxFortuneLines: Int = 60
     public var weightByFile: Bool = false
+    /// Draws a border on the view bounds and a contrasting one on the text layer.
+    ///
+    /// Tells host-geometry bugs from layout bugs apart in a screenshot. Config-file only;
+    /// not exposed in the Options sheet.
+    public var debugFrame: Bool = false
 
     public init() {}
 
@@ -96,7 +102,7 @@ public struct Configuration: Equatable, Sendable {
     public static let knownKeys = [
         "rotationSeconds", "wrapWidth", "cowfiles", "randomCow", "face", "balloonStyle",
         "fontName", "fontSize", "foreground", "background", "theme", "transition",
-        "reposition", "adaptiveWrap", "maxFortuneLines", "weightByFile",
+        "reposition", "adaptiveWrap", "maxFortuneLines", "weightByFile", "debugFrame",
     ]
 
     // MARK: Derived values, all clamped
@@ -164,6 +170,7 @@ public struct Configuration: Equatable, Sendable {
             "adaptiveWrap": adaptiveWrap,
             "maxFortuneLines": maxFortuneLines,
             "weightByFile": weightByFile,
+            "debugFrame": debugFrame,
         ]
         // Omit an unset theme so raw foreground and background values remain active.
         if let theme { object["theme"] = theme }
@@ -254,6 +261,7 @@ public extension Configuration {
         if let value = boolean("adaptiveWrap") { configuration.adaptiveWrap = value }
         if let value = number("maxFortuneLines") { configuration.maxFortuneLines = Int(value) }
         if let value = boolean("weightByFile") { configuration.weightByFile = value }
+        if let value = boolean("debugFrame") { configuration.debugFrame = value }
 
         if let name = configuration.theme, ThemePreset.named(name) == nil {
             warnings.append("theme: unknown preset '\(name)'; using the colours as given")

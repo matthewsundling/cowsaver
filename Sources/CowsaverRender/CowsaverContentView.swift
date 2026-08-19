@@ -43,6 +43,7 @@ public final class CowsaverContentView: NSView {
         // Text is the only thing on screen; let it be crisp on Retina.
         textLayer.contentsScale = window?.backingScaleFactor ?? 2
         layer?.addSublayer(textLayer)
+        applyDebugFrame()
     }
 
     @available(*, unavailable)
@@ -61,11 +62,34 @@ public final class CowsaverContentView: NSView {
         self.theme = Theme(configuration: configuration)
         layer?.backgroundColor = theme.background.cgColor
         textLayer.foregroundColor = theme.foreground.cgColor
+        applyDebugFrame()
         if !currentBlock.isEmpty { present(currentBlock, animated: false) }
     }
 
-    /// This view's shape, to hand to `CowsaverEngine.nextBlock(fitting:)` so the balloon is
-    /// wrapped for the screen it is about to appear on rather than for a fixed 40 columns.
+    /// A 1 px border on the view's own layer (bounds) and a contrasting one on the text
+    /// layer.
+    ///
+    /// So a screenshot can tell a host-geometry bug from a layout bug apart. Off by
+    /// default; when off, rendering is unchanged (`borderWidth` is already `0` on a fresh
+    /// `CALayer`).
+    ///
+    /// Called from `init`, `apply(configuration:)`, and `present` so the borders persist
+    /// across a config reload, a resize, and a rotation, whichever changes first.
+    private func applyDebugFrame() {
+        let width: CGFloat = configuration.debugFrame ? 1 : 0
+        layer?.borderWidth = width
+        layer?.borderColor = Self.debugBoundsColor
+        textLayer.borderWidth = width
+        textLayer.borderColor = Self.debugTextColor
+    }
+
+    private static let debugBoundsColor = NSColor.red.cgColor
+    private static let debugTextColor = NSColor.blue.cgColor
+
+    /// This view's shape, to hand to `CowsaverEngine.nextBlock(fitting:)`.
+    ///
+    /// The balloon is then wrapped for the screen it is about to appear on rather than for a
+    /// fixed 40 columns.
     public var canvas: AdaptiveWrap.Canvas? {
         Layout.canvas(theme: theme, in: bounds.size)
     }
@@ -97,6 +121,7 @@ public final class CowsaverContentView: NSView {
         textLayer.string = attributed
         textLayer.frame = frame(for: metrics)
         CATransaction.commit()
+        applyDebugFrame()   // re-present must not lose the border set at init/apply
 
         if animated, configuration.wantsTransition {
             let fade = CABasicAnimation(keyPath: "opacity")
@@ -106,6 +131,9 @@ public final class CowsaverContentView: NSView {
             fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             textLayer.add(fade, forKey: "cowsaver.fade")
         }
+
+        log("present bounds=\(Self.format(bounds)) fontSize=\(Self.format(metrics.fontSize)) " +
+            "textFrame=\(Self.format(textLayer.frame))")
     }
 
     /// A new random position inside a safe inset, or centred if repositioning is off.
@@ -132,7 +160,27 @@ public final class CowsaverContentView: NSView {
 
     /// Re-fit the current block when the view's geometry changes.
     public override func setFrameSize(_ newSize: NSSize) {
+        let oldSize = bounds.size
         super.setFrameSize(newSize)
+        log("setFrameSize old=\(Self.format(oldSize)) new=\(Self.format(newSize))")
         if !currentBlock.isEmpty { present(currentBlock, animated: false) }
+    }
+
+    private func log(_ message: String) {
+        // Mirrors CowsaverView.log(_:); kept local so CowsaverRender has no dependency on
+        // CowsaverSaver for a one-line NSLog wrapper.
+        NSLog("[Cowsaver] %@", message)
+    }
+
+    private static func format(_ size: NSSize) -> String {
+        "\(format(size.width))x\(format(size.height))"
+    }
+
+    private static func format(_ rect: CGRect) -> String {
+        "\(format(rect.width))x\(format(rect.height))@\(format(rect.minX)),\(format(rect.minY))"
+    }
+
+    private static func format(_ value: CGFloat) -> String {
+        String(format: "%g", Double(value))
     }
 }

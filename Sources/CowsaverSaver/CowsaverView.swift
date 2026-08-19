@@ -23,6 +23,7 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     public override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
+        logGeometry("init")
 
         // ScreenSaverView owns a required periodic callback after startAnimation(). Its
         // default animateOneFrame() implementation is a no-op, and an hourly interval keeps
@@ -63,8 +64,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     // MARK: Preview detection
 
-    /// Combine `isPreview` with geometry to distinguish small preview views from full-screen
-    /// presentation.
+    /// Combine `isPreview` with geometry.
+    ///
+    /// This distinguishes small preview views from full-screen presentation.
     ///
     /// Evaluate lazily because `window` is nil during initialization and screen geometry is
     /// unavailable until the view is attached.
@@ -82,6 +84,7 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     public override func startAnimation() {
         super.startAnimation()
+        logGeometry("startAnimation")
         rotate()   // always show something immediately, preview or not
 
         // A preview renders its first frame but does not join the shared rotation timer.
@@ -91,6 +94,7 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     public override func stopAnimation() {
         super.stopAnimation()
+        logGeometry("stopAnimation")
         unregisterFromRotation()
     }
 
@@ -98,6 +102,7 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     /// window is therefore treated as teardown too.
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        logGeometry("viewDidMoveToWindow")
         if window == nil {
             unregisterFromRotation()
         } else if isAnimating, !effectivelyPreview, !isRegistered {
@@ -196,5 +201,25 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     private func log(_ message: String) {
         // NSLog sends diagnostics to Console without requiring a custom logging subsystem.
         NSLog("[Cowsaver] %@", message)
+    }
+
+    /// One grep-friendly line per lifecycle event.
+    ///
+    /// Enough to diagnose host geometry regressions from a single `log stream` capture.
+    private func logGeometry(_ event: String) {
+        let windowFrame = window?.frame
+        let screenFrame = window?.screen?.frame
+        log("\(event) bounds=\(Self.format(bounds)) frame=\(Self.format(frame)) " +
+            "window=\(windowFrame.map(Self.format) ?? "nil") " +
+            "screen=\(screenFrame.map(Self.format) ?? "nil") " +
+            "isPreview=\(isPreview) effectivelyPreview=\(effectivelyPreview)")
+    }
+
+    private static func format(_ rect: NSRect) -> String {
+        "\(format(rect.width))x\(format(rect.height))@\(format(rect.minX)),\(format(rect.minY))"
+    }
+
+    private static func format(_ value: CGFloat) -> String {
+        String(format: "%g", Double(value))
     }
 }
