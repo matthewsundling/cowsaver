@@ -26,6 +26,21 @@ func printValidation(_ result: Configuration.LoadResult) {
     }
 }
 
+/// `--print-default-config`: the shipped defaults as a config file, for someone who wants a
+/// starting point rather than a blank editor.
+///
+/// Written with the same options `ConfigurationSheet.persist` uses, so the output is the file
+/// the settings window would have written. An unset `theme` is omitted, exactly as it is on
+/// disk, which leaves the raw `foreground` and `background` values active.
+func printDefaultConfig() -> Never {
+    guard let data = try? JSONSerialization.data(withJSONObject: Configuration().jsonObject,
+                                                 options: [.prettyPrinted, .sortedKeys]) else {
+        fail("could not serialize the default configuration")
+    }
+    emit(Bytes.from(String(decoding: data, as: UTF8.self) + "\n"))
+    exit(0)
+}
+
 /// `--validate-config`: the same loader the saver uses, so a warning here is a warning
 /// there. A missing or unreadable file is only an error when the caller named it
 /// explicitly; searching the default locations and finding nothing is normal.
@@ -125,14 +140,20 @@ while index < arguments.count {
         Usage: cowsaver-cli [-bdgpstwy] [-f <cowfile>] [-e <eyes>] [-T <tongue>]
                             [-W <columns>] [-n] [--think] [--cowdir <dir>] [message]
                cowsaver-cli --validate-config [path]
+               cowsaver-cli --print-default-config
 
         Reads the message from stdin when none is given as arguments.
 
         --validate-config [path] checks a config.json for warnings instead of rendering
         anything. With no path, it searches the same locations the screensaver does.
 
+        --print-default-config writes the shipped defaults as a config.json to stdout.
+
         """))
         exit(0)
+    }
+    if argument == "--print-default-config" {
+        printDefaultConfig()
     }
     if argument == "--validate-config" {
         var path: String?
