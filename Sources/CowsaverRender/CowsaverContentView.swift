@@ -1,6 +1,7 @@
 import AppKit
 import CowsayKit
 import QuartzCore
+import os.log
 
 /// The view that actually shows a cow. Shared by the `.saver` and the standalone app, so
 /// neither of them contains any drawing code of its own.
@@ -223,10 +224,14 @@ public final class CowsaverContentView: NSView {
         present(currentBlock, animated: false)
     }
 
+    private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "render")
+
     private func log(_ message: String) {
         // Mirrors CowsaverView.log(_:); kept local so CowsaverRender has no dependency on
-        // CowsaverSaver for a one-line NSLog wrapper.
-        NSLog("[Cowsaver] %@", message)
+        // CowsaverSaver for a one-line logging wrapper. os_log rather than NSLog because
+        // the macOS 26 host drops NSLog output from the appex; public privacy so `log show`
+        // does not redact the message.
+        Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 
     private static func format(_ size: NSSize) -> String {

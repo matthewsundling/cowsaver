@@ -1,6 +1,7 @@
 import AppKit
 import CowsayKit
 import Foundation
+import os.log
 
 /// The settings window shared by both front ends: the saver presents it as its ScreenSaver
 /// Options sheet, and `Cowsaver.app` presents it as an ordinary window.
@@ -325,9 +326,12 @@ public final class ConfigurationSheet: NSObject {
         }
     }
 
+    private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "sheet")
+
     private func log(_ message: String) {
-        // NSLog sends diagnostics to Console without requiring a custom logging subsystem.
-        NSLog("[Cowsaver] %@", message)
+        // os_log rather than NSLog: the macOS 26 host drops NSLog output from the appex,
+        // and public privacy keeps the message readable in `log show`.
+        Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 }
 

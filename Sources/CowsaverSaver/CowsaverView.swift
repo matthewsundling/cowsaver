@@ -3,6 +3,7 @@ import CowsayKit
 import CowsaverRender
 import Foundation
 import ScreenSaver
+import os.log
 
 /// The `.saver` bridge between ScreenSaverKit and the shared Cowsaver content engine.
 ///
@@ -223,9 +224,13 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
                                         warnings: warnings + result.warnings)
     }
 
+    private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "saver")
+
     private func log(_ message: String) {
-        // NSLog sends diagnostics to Console without requiring a custom logging subsystem.
-        NSLog("[Cowsaver] %@", message)
+        // os_log with an explicit subsystem and public privacy: on macOS 26 the host drops
+        // NSLog output from the appex entirely, and the default privacy would redact the
+        // message in `log show`. Default level persists to disk for after-the-fact capture.
+        Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 
     /// One grep-friendly line per lifecycle event.

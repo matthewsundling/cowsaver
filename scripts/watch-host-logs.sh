@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-PREDICATE='process == "legacyScreenSaver" OR process == "System Settings"'
+PREDICATE='process == "legacyScreenSaver" OR process == "System Settings" OR subsystem == "com.matthewsundling.cowsaver"'
 
 # NSLog from the appex lands at debug level in the unified log; without
 # `--level debug` neither `log stream` nor `log show` returns a single line.
