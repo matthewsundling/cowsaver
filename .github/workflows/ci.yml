@@ -55,11 +55,13 @@ jobs:
 
       - name: Verify the bundle loads and its principal class resolves
         # Loading the bundle verifies that its principal class resolves; compilation alone
-        # does not exercise this Info.plist requirement.
+        # does not exercise this Info.plist requirement. Building a view and asking it for
+        # its Options sheet covers the settings path the same way a host would.
         run: |
           cat > /tmp/loadtest.swift <<'EOF'
           import AppKit
           import Foundation
+          import ScreenSaver
           let path = CommandLine.arguments[1]
           guard let bundle = Bundle(path: path) else { print("FAIL: not a bundle"); exit(1) }
           guard bundle.load() else { print("FAIL: bundle.load() returned false"); exit(1) }
@@ -68,7 +70,20 @@ jobs:
               exit(1)
           }
           guard cls is NSView.Type else { print("FAIL: not an NSView subclass"); exit(1) }
-          print("OK: \(cls)")
+          guard let saverClass = cls as? ScreenSaverView.Type else {
+              print("FAIL: not a ScreenSaverView subclass"); exit(1)
+          }
+          guard let view = saverClass.init(frame: NSRect(x: 0, y: 0, width: 640, height: 400),
+                                           isPreview: true) else {
+              print("FAIL: init(frame:isPreview:) returned nil"); exit(1)
+          }
+          guard view.hasConfigureSheet else { print("FAIL: hasConfigureSheet is false"); exit(1) }
+          guard let sheet = view.configureSheet else { print("FAIL: configureSheet is nil"); exit(1) }
+          let size = sheet.contentView?.frame.size ?? .zero
+          guard size.width > 0, size.height > 0 else {
+              print("FAIL: the Options sheet has no content: \(size)"); exit(1)
+          }
+          print("OK: \(cls), Options sheet \(size)")
           EOF
           swiftc -o /tmp/loadtest /tmp/loadtest.swift
           /tmp/loadtest build/Cowsaver.saver

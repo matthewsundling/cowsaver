@@ -6,32 +6,45 @@ import Foundation
 /// `legacyScreenSaver.appex`, where `NSHomeDirectory()` is the sandbox container; the
 /// standalone app sees the user's home directory.
 ///
-/// Foundation resolves Application Support in each context. The explicit container path
-/// also lets the standalone app find content imported for the screensaver. Existing paths
-/// are used in order.
+/// The screensaver container is canonical: it is the one directory both front ends resolve
+/// to the same files, so it comes first in every search and is where settings are written.
+/// The real home's Application Support directory follows it, which keeps a config or
+/// imported fortunes already living there in use.
 public enum ResourceLocations {
     public static let containerPath =
         "Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data"
 
-    /// Directories that may hold a user's own config and content, most specific first.
-    public static func supportDirectories() -> [URL] {
-        var directories: [URL] = []
+    /// The `config.json` both front ends read and write.
+    public static func canonicalConfigurationURL() -> URL {
+        containerSupportDirectory().appendingPathComponent("config.json")
+    }
 
+    /// Directories that may hold a user's own config and content, canonical location first.
+    public static func supportDirectories() -> [URL] {
+        var directories: [URL] = [containerSupportDirectory()]
+
+        // Outside the sandbox this is the user's own Application Support directory; inside
+        // it, it is the container directory again and dedupes away.
         if let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                   in: .userDomainMask).first {
             directories.append(support.appendingPathComponent("Cowsaver"))
         }
 
-        // Add the screensaver container explicitly. Inside the sandbox this duplicates the
-        // Application Support result; outside it, it locates imported screensaver content.
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        directories.append(
-            home.appendingPathComponent(containerPath)
-                .appendingPathComponent("Library/Application Support/Cowsaver")
-        )
-
         var seen = Set<String>()
         return directories.filter { seen.insert($0.standardizedFileURL.path).inserted }
+    }
+
+    /// The container's Application Support directory, seen from either side of the sandbox.
+    ///
+    /// Inside `legacyScreenSaver.appex` the home directory is already the container's `Data`
+    /// directory, so appending the container path again would nest a second copy of it that
+    /// no process ever writes to.
+    private static func containerSupportDirectory() -> URL {
+        let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL
+        let data = home.path.hasSuffix("/" + containerPath)
+            ? home
+            : home.appendingPathComponent(containerPath)
+        return data.appendingPathComponent("Library/Application Support/Cowsaver")
     }
 
     /// Return the first existing `config.json` in the search order.
