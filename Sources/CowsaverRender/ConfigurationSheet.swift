@@ -24,6 +24,7 @@ public final class ConfigurationSheet: NSObject {
     var randomCowBox: NSButton!
     var repositionBox: NSButton!
     var transitionBox: NSButton!
+    var okButton: NSButton!
     /// One checkbox per bundled cow, in the order the list shows them.
     private(set) var cowfileBoxes: [NSButton] = []
 
@@ -37,14 +38,29 @@ public final class ConfigurationSheet: NSObject {
                   onSave: onSave)
     }
 
-    /// The cow names are injectable so tests do not depend on a bundle being present.
+    /// The cow names are injectable so tests do not depend on a bundle being present, and
+    /// the height cap so a test can describe a screen this machine does not have.
     init(configuration: Configuration,
          cowfileNames: [String],
+         maximumContentHeight: CGFloat? = ConfigurationSheet.availableContentHeight(),
          onSave: @escaping (Configuration) -> Void) {
         self.configuration = configuration
         self.onSave = onSave
         super.init()
-        buildWindow(cowfileNames: cowfileNames)
+        buildWindow(cowfileNames: cowfileNames, maximumContentHeight: maximumContentHeight)
+    }
+
+    /// The tallest this window's content may be, or nil where there is no screen to ask.
+    ///
+    /// The saver's host presents this window as a sheet on the System Settings window, so
+    /// the room it has is the visible frame less that window's own title bar and the inset a
+    /// sheet keeps from the top of its parent. The margin is deliberately generous: a sheet
+    /// whose buttons sit past the bottom of the screen cannot be dismissed (issue #16),
+    /// while one that starts scrolling a little sooner than it strictly must costs nothing.
+    /// On any display with room for the natural height, this changes nothing.
+    static func availableContentHeight() -> CGFloat? {
+        guard let visible = NSScreen.main?.visibleFrame else { return nil }
+        return visible.height - 120
     }
 
     /// The bundled cow names, read from whichever bundle carries this class: the `.saver`
@@ -57,7 +73,7 @@ public final class ConfigurationSheet: NSObject {
 
     // MARK: Layout
 
-    private func buildWindow(cowfileNames: [String]) {
+    private func buildWindow(cowfileNames: [String], maximumContentHeight: CGFloat?) {
         let width: CGFloat = 420
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 400),
@@ -69,7 +85,8 @@ public final class ConfigurationSheet: NSObject {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        // No bottom inset: the gap below the last control is the button row's own spacing.
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 0, right: 20)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         rotationField = NSTextField(string: "")
@@ -124,7 +141,7 @@ public final class ConfigurationSheet: NSObject {
         // Show the configuration location shared by the sheet and the runtime loader.
         stack.addArrangedSubview(caption("""
             Every setting here also lives in config.json inside Cowsaver's container, \
-            which is the supported way to configure it. See the README for the path.
+            which is the supported way to configure it. See docs/configuration.md for the path.
             """, width: width))
         stack.addArrangedSubview(NSButton(title: "Reveal config.json in Finder",
                                           target: self, action: #selector(revealConfiguration)))
@@ -133,29 +150,74 @@ public final class ConfigurationSheet: NSObject {
                                action: #selector(restoreDefaults))
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "OK", target: self, action: #selector(save))
-        save.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [NSView(), restore, cancel, save])
+        okButton = NSButton(title: "OK", target: self, action: #selector(save))
+        okButton.keyEquivalent = "\r"
+        let buttons = NSStackView(views: [NSView(), restore, cancel, okButton])
         buttons.orientation = .horizontal
         buttons.spacing = 12
         buttons.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(buttons)
-        buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
 
+        // The controls scroll; the buttons do not. A window capped shorter than its controls
+        // still has to offer Restore Defaults, Cancel, and OK, or it cannot be dismissed.
+        let scroll = scrollingDocument(stack)
         let content = NSView()
-        content.addSubview(stack)
+        content.addSubview(scroll)
+        content.addSubview(buttons)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: content.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            scroll.topAnchor.constraint(equalTo: content.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -buttonGap),
+            buttons.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor,
+                                            constant: -buttonMargin),
         ])
         window.contentView = content
         apply(configuration)
-        // Size from the arranged controls so adding a row expands the sheet automatically.
+        // Size from the arranged controls so adding a row expands the sheet automatically,
+        // and cap that at the room the screen has: the same height as before wherever it
+        // fits, and a scrolling document rather than unreachable buttons where it does not.
         content.layoutSubtreeIfNeeded()
-        window.setContentSize(NSSize(width: width, height: stack.fittingSize.height))
+        let natural = stack.fittingSize.height + buttons.fittingSize.height
+            + buttonGap + buttonMargin
+        window.setContentSize(NSSize(width: width,
+                                     height: min(natural, maximumContentHeight ?? natural)))
         self.window = window
+    }
+
+    /// The gap above the button row, and the margin below it.
+    private let buttonGap: CGFloat = 12
+    private let buttonMargin: CGFloat = 20
+
+    /// Everything above the button row, in a document that scrolls when the window is capped
+    /// shorter than the controls are tall.
+    ///
+    /// `drawsBackground` is off so the window's own background still shows through; on a
+    /// screen with room for the whole sheet, nothing about the sheet changes at all.
+    private func scrollingDocument(_ stack: NSStackView) -> NSScrollView {
+        let document = FlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = document
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: document.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+            document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+        ])
+        return scroll
     }
 
     private func row(_ label: String, _ control: NSView) -> NSStackView {

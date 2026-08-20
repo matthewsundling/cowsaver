@@ -27,6 +27,13 @@ struct ConfigurationSheetTests {
         }
     }
 
+    /// A sheet built for a screen of a stated size. `nil` is no cap at all: the height the
+    /// controls ask for, which is what a screen with room to spare produces.
+    private func makeSheet(cappedAt cap: CGFloat?) -> ConfigurationSheet {
+        ConfigurationSheet(configuration: Configuration(), cowfileNames: cowfileNames,
+                           maximumContentHeight: cap) { _ in }
+    }
+
     @Test func buildsItsControlsFromTheConfiguration() {
         var configuration = Configuration()
         configuration.rotationSeconds = 12
@@ -123,5 +130,30 @@ struct ConfigurationSheetTests {
         #expect(result.randomCow == defaults.randomCow)
         #expect(result.cowfiles == ["default", "dragon", "stegosaurus", "tux"],
                 "the default cows, in the order the list shows them")
+    }
+
+    /// A screen without room for the whole sheet gets a shorter window with its controls
+    /// scrolling, not a window whose buttons sit past the bottom edge (issue #16).
+    @Test func aScreenTooShortForTheSheetCapsItAndKeepsTheButtonsInside() throws {
+        let cap: CGFloat = 500
+        let sheet = makeSheet(cappedAt: cap)
+        let content = try #require(sheet.window.contentView)
+        content.layoutSubtreeIfNeeded()
+
+        #expect(content.frame.height <= cap, "\(content.frame.height) is taller than the screen")
+        let ok = sheet.okButton.convert(sheet.okButton.bounds, to: content)
+        #expect(content.bounds.contains(ok),
+                "OK at \(ok) is outside the window's \(content.bounds)")
+    }
+
+    /// The cap is a limit, not a size: with room to spare the window is exactly as tall as
+    /// its controls, which is what every screen large enough already showed.
+    @Test func aScreenWithRoomToSpareLeavesTheHeightAlone() throws {
+        let capped = try #require(makeSheet(cappedAt: 2000).window.contentView)
+        let natural = try #require(makeSheet(cappedAt: nil).window.contentView)
+
+        #expect(capped.frame.height == natural.frame.height)
+        #expect(natural.frame.height > 500,
+                "the cap above only means something if 500 actually clamps")
     }
 }

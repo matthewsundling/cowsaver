@@ -28,9 +28,10 @@ public final class CowsaverContentView: NSView {
     private var randomGenerator: SplitMix64
     /// The most recent block, so a resize can re-fit without asking for new content.
     private var currentBlock: String = ""
-    /// The bounds the current frame was fitted to, so a geometry signal that moved nothing
-    /// re-presents nothing.
-    private var presentedBounds: CGSize?
+    /// The effective canvas the current frame was fitted to, so a geometry signal that
+    /// moved nothing re-presents nothing. It tracks the canvas rather than the bounds
+    /// because a window resize can change the canvas while the bounds stay where they are.
+    private var presentedCanvas: CGSize?
 
     /// The metrics the last `present` used, and the frame it gave the text layer. Zero until
     /// something has been presented.
@@ -65,10 +66,12 @@ public final class CowsaverContentView: NSView {
 
     public override var isOpaque: Bool { true }
 
-    /// Recompute scale when the view joins a window; `window` is unavailable during init.
+    /// Recompute scale and re-fit when the view joins a window; `window` is unavailable
+    /// during init, and the window is what bounds the canvas.
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let scale = window?.backingScaleFactor { textLayer.contentsScale = scale }
+        refitIfCanvasChanged()
     }
 
     public func apply(configuration: Configuration) {
@@ -100,25 +103,53 @@ public final class CowsaverContentView: NSView {
     private static let debugBoundsColor = NSColor.red.cgColor
     private static let debugTextColor = NSColor.blue.cgColor
 
+    /// The region content is fitted to and positioned in: this view's bounds, clamped per
+    /// dimension to the hosting window and anchored at the view's origin.
+    ///
+    /// On macOS 26 the legacy host sometimes resizes the view to the display's pixel
+    /// dimensions while the hosting window stays at point dimensions (issue #2). Content
+    /// fitted to those bounds is drawn at twice the intended size, and with AppKit's
+    /// bottom-left origin the window shows only the window-sized region at the view's
+    /// origin. Fitting to the window instead keeps the whole block where it can be seen.
+    ///
+    /// A window below the floor describes nothing: the host attaches a view to a `0x0`
+    /// frame before the real one arrives, and loads a preview instance whose own frame is
+    /// empty. Those fall back to the bounds, and so does every healthy view, whose window
+    /// is at least as large as the bounds it was given. The window frame alone decides
+    /// this; it was authoritative in every capture, including ones where `screen` was nil.
+    private var effectiveCanvas: CGSize {
+        guard let frame = window?.frame,
+              frame.width >= Self.smallestMeaningfulWindow,
+              frame.height >= Self.smallestMeaningfulWindow else { return bounds.size }
+        return CGSize(width: min(bounds.width, frame.width),
+                      height: min(bounds.height, frame.height))
+    }
+
+    /// Below this, a window frame is a placeholder rather than a description of anything.
+    private static let smallestMeaningfulWindow: CGFloat = 64
+
     /// This view's shape, to hand to `CowsaverEngine.nextBlock(fitting:)`.
     ///
     /// The balloon is then wrapped for the screen it is about to appear on rather than for a
     /// fixed 40 columns.
     public var canvas: AdaptiveWrap.Canvas? {
-        Layout.canvas(theme: theme, in: bounds.size)
+        Layout.canvas(theme: theme, in: effectiveCanvas)
     }
 
     /// Show a block of ASCII art. This is the only thing that ever causes drawing.
     public func present(_ block: String, animated: Bool) {
         currentBlock = block
+        // Read once: the fit below and the placement in `frame(for:in:)` would disagree if
+        // the window changed size between them.
+        let canvas = effectiveCanvas
 
         // An explicitly pinned size is an explicit choice, so only auto-fit is contained; a
-        // pinned size that cannot fit is clipped inside its own layer instead. See `frame(for:)`.
+        // pinned size that cannot fit is clipped inside its own layer instead. See `frame(for:in:)`.
         let metrics = configuration.fontSize > 0
             ? Layout.metrics(block: block, theme: theme,
                              fontSize: CGFloat(configuration.fontSize))
-            : Layout.contained(Layout.fit(block: block, theme: theme, in: bounds.size),
-                               in: bounds.size)
+            : Layout.contained(Layout.fit(block: block, theme: theme, in: canvas),
+                               in: canvas)
 
         let font = theme.font(ofSize: metrics.fontSize)
         let paragraph = NSMutableParagraphStyle()
@@ -131,7 +162,7 @@ public final class CowsaverContentView: NSView {
             .paragraphStyle: paragraph,
         ])
 
-        let textFrame = frame(for: metrics)
+        let textFrame = frame(for: metrics, in: canvas)
 
         // Update content and geometry without implicit animations; the optional fade below
         // is the only transition associated with a rotation.
@@ -144,7 +175,7 @@ public final class CowsaverContentView: NSView {
 
         presentedMetrics = metrics
         presentedTextFrame = textFrame
-        presentedBounds = bounds.size
+        presentedCanvas = canvas
 
         if animated, configuration.wantsTransition {
             let fade = CABasicAnimation(keyPath: "opacity")
@@ -155,27 +186,32 @@ public final class CowsaverContentView: NSView {
             textLayer.add(fade, forKey: "cowsaver.fade")
         }
 
-        log("present bounds=\(Self.format(bounds)) fontSize=\(Self.format(metrics.fontSize)) " +
+        // The canvas appears only when it differs from the bounds, which is the clamp
+        // engaging; the fields the field diagnosis greps for are unchanged.
+        let clamp = canvas == bounds.size ? "" : " canvas=\(Self.format(canvas))"
+        log("present bounds=\(Self.format(bounds))\(clamp) " +
+            "fontSize=\(Self.format(metrics.fontSize)) " +
             "textFrame=\(Self.format(textLayer.frame))")
     }
 
     /// A new random position inside a safe inset, or centred if repositioning is off.
     ///
-    /// The size is clamped to the view. A layer larger than its bounds is what leaves the
-    /// slack below at zero, pinning the block at the origin and clipping it at the top and
-    /// right; clamped, an oversized block is centred and clips inside its own layer instead.
-    /// Auto-fit has already been contained, so the clamp only bites on a pinned `fontSize`.
-    private func frame(for metrics: LayoutMetrics) -> CGRect {
-        let size = CGSize(width: min(metrics.textSize.width, bounds.width),
-                          height: min(metrics.textSize.height, bounds.height))
+    /// The size is clamped to the canvas. A layer larger than the region it sits in is what
+    /// leaves the slack below at zero, pinning the block at the origin and clipping it at the
+    /// top and right; clamped, an oversized block is centred and clips inside its own layer
+    /// instead. Auto-fit has already been contained, so the clamp only bites on a pinned
+    /// `fontSize`.
+    private func frame(for metrics: LayoutMetrics, in canvas: CGSize) -> CGRect {
+        let size = CGSize(width: min(metrics.textSize.width, canvas.width),
+                          height: min(metrics.textSize.height, canvas.height))
         guard configuration.reposition else {
-            return CGRect(x: (bounds.width - size.width) / 2,
-                          y: (bounds.height - size.height) / 2,
+            return CGRect(x: (canvas.width - size.width) / 2,
+                          y: (canvas.height - size.height) / 2,
                           width: size.width, height: size.height)
         }
 
-        let slackX = max(bounds.width - size.width, 0)
-        let slackY = max(bounds.height - size.height, 0)
+        let slackX = max(canvas.width - size.width, 0)
+        let slackY = max(canvas.height - size.height, 0)
         // Keep it off the very edge even when the block nearly fills the screen.
         let inset: CGFloat = 0.1
         let x = slackX * (inset + (1 - 2 * inset) * unitRandom())
@@ -192,7 +228,7 @@ public final class CowsaverContentView: NSView {
         let oldSize = bounds.size
         super.setFrameSize(newSize)
         log("setFrameSize old=\(Self.format(oldSize)) new=\(Self.format(newSize))")
-        refitIfBoundsChanged()
+        refitIfCanvasChanged()
     }
 
     /// Re-fit from the layout pass too.
@@ -202,7 +238,7 @@ public final class CowsaverContentView: NSView {
     /// timer activation in issue #2. Every such path still runs a layout pass.
     public override func layout() {
         super.layout()
-        refitIfBoundsChanged()
+        refitIfCanvasChanged()
     }
 
     /// Re-fit and re-scale when the backing store changes.
@@ -212,15 +248,15 @@ public final class CowsaverContentView: NSView {
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         if let scale = window?.backingScaleFactor { textLayer.contentsScale = scale }
-        refitIfBoundsChanged()
+        refitIfCanvasChanged()
     }
 
     /// Re-present the current block, but only where the geometry actually moved.
     ///
-    /// `layout()` fires far more often than the bounds change, and re-presenting identical
+    /// `layout()` fires far more often than the canvas changes, and re-presenting identical
     /// geometry would redraw and re-log for nothing.
-    private func refitIfBoundsChanged() {
-        guard !currentBlock.isEmpty, bounds.size != presentedBounds else { return }
+    private func refitIfCanvasChanged() {
+        guard !currentBlock.isEmpty, effectiveCanvas != presentedCanvas else { return }
         present(currentBlock, animated: false)
     }
 
