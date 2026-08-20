@@ -84,7 +84,11 @@ public struct Configuration: Equatable, Sendable {
     public var sizeVariation: Double = 0
     public var foreground: String = "#33FF66"
     public var background: String = "#000000"
-    public var theme: String?
+    /// A named preset, which supplies both colours. Cowsaver ships on `green-phosphor`, so
+    /// restoring defaults lands on a named theme rather than on a pair of loose colours. A
+    /// file that sets `foreground` or `background` without naming a theme clears this, so
+    /// colours written by hand still win.
+    public var theme: String? = "green-phosphor"
     public var transition: String = "fade"
     public var reposition: Bool = true
     /// Widen the balloon when that makes the text bigger. See `AdaptiveWrap`.
@@ -273,6 +277,13 @@ public extension Configuration {
         if let value = number("maxFortuneLines") { configuration.maxFortuneLines = Int(value) }
         if let value = boolean("weightByFile") { configuration.weightByFile = value }
         if let value = boolean("debugFrame") { configuration.debugFrame = value }
+
+        // Colours in the file beat the default preset, which would otherwise override every
+        // hand-written colour. Naming a theme is how a file asks for a preset instead.
+        if object["theme"] == nil,
+           object["foreground"] != nil || object["background"] != nil {
+            configuration.theme = nil
+        }
 
         if let name = configuration.theme, ThemePreset.named(name) == nil {
             warnings.append("theme: unknown preset '\(name)'; using the colours as given")

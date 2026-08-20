@@ -68,7 +68,7 @@ next time the screensaver starts, so stop and start it afterwards.
 | `sizeVariation` | number | `0` | Clamped to 0–0.9 in use. Applies to auto-fit only. |
 | `foreground` | string | `"#33FF66"` | `#RGB` or `#RRGGBB`, with or without the `#`. |
 | `background` | string | `"#000000"` | Same as `foreground`. |
-| `theme` | string | unset | `green-phosphor`, `amber`, `paperwhite`, `solarized-dark`. |
+| `theme` | string | `green-phosphor` | `green-phosphor`, `amber`, `paperwhite`, `solarized-dark`. |
 | `transition` | string | `"fade"` | `none` disables the fade; any other value keeps it. |
 | `reposition` | boolean | `true` | — |
 | `adaptiveWrap` | boolean | `true` | — |
@@ -128,8 +128,8 @@ at one second.
 
 ### Appearance
 
-- **`theme`** names a preset and overrides `foreground` and `background` when it is set.
-  Matching is case-insensitive.
+- **`theme`** names a preset, which supplies both colours. Cowsaver ships on
+  `green-phosphor`. Matching is case-insensitive.
 
   | Theme | Foreground | Background |
   |---|---|---|
@@ -138,9 +138,13 @@ at one second.
   | `paperwhite` | `#2B2B2B` | `#F5F2E8` |
   | `solarized-dark` | `#93A1A1` | `#002B36` |
 
-- **`foreground`** and **`background`** are used when no theme is set. To choose your own
-  colours, remove the `theme` key entirely rather than setting it to an empty string, which
-  is not a preset name and warns on every load. This is what the settings window's *custom
+- **`foreground`** and **`background`** are your own colours. Setting either one without
+  also naming a `theme` drops the shipped preset, so the colours you wrote are the ones you
+  get. Naming a theme in the same file is how you ask for the preset instead; the preset
+  then supplies both colours and these two are ignored.
+
+  Do not try to clear a theme by setting it to an empty string, which is not a preset name
+  and warns on every load. Remove the key. This is what the settings window's *custom
   colours* option does, and it is why a saved file has no `theme` key when that option is
   selected.
 - **`transition`** controls the 0.6-second crossfade between fortunes. `none` turns it off.
@@ -221,10 +225,9 @@ To start from the shipped defaults instead of an existing file:
 .build/debug/cowsaver-cli --print-default-config > config.json
 ```
 
-That output has 17 keys rather than 18: `theme` is unset by default, and Cowsaver omits an
-unset theme rather than writing it empty, which keeps the raw `foreground` and `background`
-values active. `config.example.json` is the same file with `"theme": "green-phosphor"`
-added.
+That output has all 18 keys, `config.example.json` included. A file written by the settings
+window under *custom colours* has 17: Cowsaver omits an unset theme rather than writing it
+empty, which leaves the raw `foreground` and `background` values in effect.
 
 ## The example file, annotated
 
@@ -235,7 +238,7 @@ with comments added:
 ```jsonc
 {
   "adaptiveWrap" : true,               // may widen the balloon to fill the screen
-  "background" : "#000000",            // unused while "theme" is set
+  "background" : "#000000",            // ignored while "theme" names a preset
   "balloonStyle" : "say",              // "think" for a thought balloon
   "cowfiles" : [                       // [] would mean every bundled cowfile
     "stegosaurus",
@@ -247,7 +250,7 @@ with comments added:
   "face" : "default",                  // or "dead", "d", "dead, young", ...
   "fontName" : "Menlo",                // must be fixed-pitch
   "fontSize" : 0,                      // 0 fits each fortune to the screen
-  "foreground" : "#33FF66",            // unused while "theme" is set
+  "foreground" : "#33FF66",            // ignored while "theme" names a preset
   "maxFortuneLines" : 60,              // taller fortunes are never shown; 0 for no limit
   "randomCow" : true,                  // false pins the first loadable cowfile above
   "reposition" : true,                 // false centres every fortune
