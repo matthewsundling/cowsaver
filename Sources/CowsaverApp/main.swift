@@ -63,7 +63,8 @@ while index < arguments.count {
                               assertion, so it will not cover a video.
           --configure         open the settings window and write config.json
 
-        Configuration lives in a JSON file, not in this binary. See the README.
+        Configuration lives in a JSON file, not in this binary.
+        See docs/configuration.md.
 
         This app does not integrate with screen lock and will not display on the lock
         screen. For that, install the screensaver: make install

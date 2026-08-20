@@ -79,6 +79,9 @@ public struct Configuration: Equatable, Sendable {
     public var fontName: String = "Menlo"
     /// `0` means auto-fit: pick the largest size that fits, once per rotation.
     public var fontSize: Double = 0
+    /// How far below the fitted size a rotation may be drawn. `0` draws every rotation at
+    /// the fitted size. Auto-fit only: a pinned `fontSize` is an explicit choice.
+    public var sizeVariation: Double = 0
     public var foreground: String = "#33FF66"
     public var background: String = "#000000"
     public var theme: String?
@@ -97,12 +100,13 @@ public struct Configuration: Equatable, Sendable {
 
     public init() {}
 
-    /// Every key this configuration understands. Used to pull the matching values out of
-    /// `ScreenSaverDefaults` before the config file is layered on top.
+    /// Every key this configuration understands. A key outside this list warns on load, and
+    /// the documentation tests require each one to appear in the reference and the example.
     public static let knownKeys = [
         "rotationSeconds", "wrapWidth", "cowfiles", "randomCow", "face", "balloonStyle",
-        "fontName", "fontSize", "foreground", "background", "theme", "transition",
-        "reposition", "adaptiveWrap", "maxFortuneLines", "weightByFile", "debugFrame",
+        "fontName", "fontSize", "sizeVariation", "foreground", "background", "theme",
+        "transition", "reposition", "adaptiveWrap", "maxFortuneLines", "weightByFile",
+        "debugFrame",
     ]
 
     // MARK: Derived values, all clamped
@@ -113,6 +117,10 @@ public struct Configuration: Equatable, Sendable {
 
     /// `Text::Wrap` requires at least 2; absurdly wide wrapping just wastes the screen.
     public var effectiveWrapWidth: Int { min(max(wrapWidth, 2), 500) }
+
+    /// Clamped so a rotation cannot shrink to nothing. At `0.9` the smallest draw is a tenth
+    /// of the fitted size, which is already past reading.
+    public var effectiveSizeVariation: Double { min(max(sizeVariation, 0), 0.9) }
 
     public var balloonMode: BalloonMode {
         balloonStyle.lowercased() == "think" ? .think : .say
@@ -163,6 +171,7 @@ public struct Configuration: Equatable, Sendable {
             "balloonStyle": balloonStyle,
             "fontName": fontName,
             "fontSize": fontSize,
+            "sizeVariation": sizeVariation,
             "foreground": foreground,
             "background": background,
             "transition": transition,
@@ -220,8 +229,9 @@ public extension Configuration {
         return load(object: object)
     }
 
-    /// Receives the merged configuration layers: built-in defaults, `ScreenSaverDefaults`,
-    /// then `config.json`, whose values have the highest priority.
+    /// Decode the contents of `config.json`, which is the whole configuration. A key it does
+    /// not hold keeps the built-in default; a key nothing here reads warns rather than
+    /// passing unnoticed.
     static func load(object: [String: Any]) -> LoadResult {
         var configuration = Configuration()
         var warnings: [String] = []
@@ -253,6 +263,7 @@ public extension Configuration {
         if let value = string("balloonStyle") { configuration.balloonStyle = value }
         if let value = string("fontName") { configuration.fontName = value }
         if let value = number("fontSize") { configuration.fontSize = value }
+        if let value = number("sizeVariation") { configuration.sizeVariation = value }
         if let value = string("foreground") { configuration.foreground = value }
         if let value = string("background") { configuration.background = value }
         if let value = string("theme") { configuration.theme = value }
@@ -272,6 +283,12 @@ public extension Configuration {
         }
         if ThemeColor(hex: configuration.background) == nil {
             warnings.append("background: '\(configuration.background)' is not a hex colour")
+        }
+
+        // Without this a misspelled key looks exactly like a setting that had no effect.
+        // Sorted, so a log grep and a test see the same order every time.
+        for key in object.keys.sorted() where !knownKeys.contains(key) {
+            warnings.append("\(key): not a setting Cowsaver knows; ignoring it")
         }
 
         return LoadResult(configuration: configuration, warnings: warnings)

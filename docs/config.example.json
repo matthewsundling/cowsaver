@@ -17,6 +17,7 @@
   "randomCow" : true,
   "reposition" : true,
   "rotationSeconds" : 45,
+  "sizeVariation" : 0,
   "theme" : "green-phosphor",
   "transition" : "fade",
   "weightByFile" : false,

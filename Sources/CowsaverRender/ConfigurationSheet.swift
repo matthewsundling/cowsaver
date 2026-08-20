@@ -23,6 +23,7 @@ public final class ConfigurationSheet: NSObject {
     var adaptiveWrapBox: NSButton!
     var randomCowBox: NSButton!
     var repositionBox: NSButton!
+    var sizeVariationBox: NSButton!
     var transitionBox: NSButton!
     var okButton: NSButton!
     /// One checkbox per bundled cow, in the order the list shows them.
@@ -30,6 +31,13 @@ public final class ConfigurationSheet: NSObject {
 
     /// Shown when raw `foreground` and `background` values are active instead of a preset.
     private let customColoursTitle = "custom colours"
+
+    /// The `sizeVariation` the controls were built from. Checking the box hands back a
+    /// hand-edited value rather than replacing it with the amount below.
+    private var loadedSizeVariation: Double = 0
+
+    /// What checking the box means when the file names no amount of its own.
+    private let defaultSizeVariation = 0.3
 
     public convenience init(configuration: Configuration,
                             onSave: @escaping (Configuration) -> Void) {
@@ -107,6 +115,7 @@ public final class ConfigurationSheet: NSObject {
         adaptiveWrapBox = checkbox("Widen the balloon when that makes the text bigger", on: false)
         randomCowBox = checkbox("Random cow each rotation", on: false)
         repositionBox = checkbox("Move to a new position each rotation", on: false)
+        sizeVariationBox = checkbox("Vary the text size between rotations", on: false)
         transitionBox = checkbox("Fade between fortunes", on: false)
         cowfileBoxes = cowfileNames.map { checkbox($0, on: false) }
 
@@ -122,6 +131,7 @@ public final class ConfigurationSheet: NSObject {
         stack.addArrangedSubview(adaptiveWrapBox)
         stack.addArrangedSubview(randomCowBox)
         stack.addArrangedSubview(repositionBox)
+        stack.addArrangedSubview(sizeVariationBox)
         stack.addArrangedSubview(transitionBox)
 
         let cowHeader = NSStackView(views: [
@@ -300,6 +310,8 @@ public final class ConfigurationSheet: NSObject {
         adaptiveWrapBox.state = configuration.adaptiveWrap ? .on : .off
         randomCowBox.state = configuration.randomCow ? .on : .off
         repositionBox.state = configuration.reposition ? .on : .off
+        sizeVariationBox.state = configuration.sizeVariation > 0 ? .on : .off
+        loadedSizeVariation = configuration.sizeVariation
         transitionBox.state = configuration.wantsTransition ? .on : .off
 
         // An empty list means every bundled cow, which shows as all of them checked.
@@ -334,6 +346,9 @@ public final class ConfigurationSheet: NSObject {
         updated.adaptiveWrap = adaptiveWrapBox.state == .on
         updated.randomCow = randomCowBox.state == .on
         updated.reposition = repositionBox.state == .on
+        updated.sizeVariation = sizeVariationBox.state == .on
+            ? (loadedSizeVariation > 0 ? loadedSizeVariation : defaultSizeVariation)
+            : 0
         updated.transition = transitionBox.state == .on ? "fade" : "none"
         updated.cowfiles = selectedCowfiles()
 
@@ -402,10 +417,10 @@ public final class ConfigurationSheet: NSObject {
 extension ConfigurationSheet {
     /// Write the settings back to `config.json`.
     ///
-    /// The file has the highest configuration priority, so the sheet writes `config.json`
-    /// rather than a separate `ScreenSaverDefaults` representation. It writes the canonical
-    /// path, which is the copy both front ends read. `Configuration.jsonObject` centralizes
-    /// the persisted schema and is covered by the configuration tests.
+    /// `config.json` is the whole configuration, so the sheet writes it rather than a store
+    /// of its own. It writes the canonical path, which is the copy both front ends read.
+    /// `Configuration.jsonObject` centralizes the persisted schema and is covered by the
+    /// configuration tests.
     public static func persist(_ configuration: Configuration) -> String? {
         let url = ResourceLocations.canonicalConfigurationURL()
         let directory = url.deletingLastPathComponent()

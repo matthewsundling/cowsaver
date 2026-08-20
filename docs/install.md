@@ -97,8 +97,8 @@ make cli
 ```
 
 That prints the search order with a `*` beside the file in use, and then either `ok` or the
-same warnings the screensaver writes to the log. A misspelled key is not one of those
-warnings — unknown keys are ignored silently. See
+same warnings the screensaver writes to the log. A misspelled key is one of those warnings:
+an unknown key is named and ignored, so a setting that never took effect says so here. See
 [when a value is wrong](configuration.md#when-a-value-is-wrong).
 
 Other common cases:
@@ -109,9 +109,12 @@ Other common cases:
 - **The screensaver runs but the layout looks wrong.** Set `"debugFrame": true` in
   `config.json` and take a screenshot: a red border marks the view bounds and a blue border
   the text layer, which separates a host-geometry problem from a layout problem.
-- **You are on macOS 26 Tahoe.** Cowsaver builds and installs there but is not currently
-  supported: the Options sheet does not open and timer-based activation can clip content.
-  See the [compatibility notes](compatibility.md).
+- **You are on macOS 26 Tahoe.** Cowsaver builds and installs there, and both failures
+  behind that caveat are now diagnosed and defended against — content is fitted to the
+  hosting window rather than the resized view, and the settings sheet caps its height — but
+  no Tahoe machine has verified either fix yet. If clicking Options produces nothing at all,
+  relaunching System Settings clears it; `Cowsaver.app --configure` opens the same settings
+  window whether or not it does. See the [compatibility notes](compatibility.md).
 
 If a problem survives all of that, open an issue and include the `make doctor` output.
 

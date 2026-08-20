@@ -5,7 +5,6 @@ This document lists the Apple APIs Cowsaver depends on, the effect of a failure,
 | API or host | Used by | Status | If it fails | Current mitigation |
 |---|---|---|---|---|
 | `ScreenSaverView` | `CowsaverSaver` | Deprecated since Catalina; no public replacement is available. | The installed `.saver` may not load or render. | Use `Cowsaver.app --fullscreen` for manual display while diagnosing the saver. The cowsay core and renderer remain separate from the screensaver shell. |
-| `ScreenSaverDefaults` | `CowsaverSaver` | Legacy ScreenSaver API. | Values saved by the Options sheet may no longer be read. | `config.json` is the supported configuration path and overrides those values. |
 | `legacyScreenSaver.appex` host | macOS host process for the `.saver` | Apple-managed and sandboxed. | Lifecycle callbacks may be incomplete or views may remain attached longer than expected. | `RotationCoordinator` uses weak clients, removes detached views, and stops its timer when no clients remain. |
 | `NSView` and `CATextLayer` | `CowsaverRender` | Current AppKit and Core Animation APIs. | Text rendering fails. | No separate fallback renderer is provided. |
 | `CABasicAnimation` | `CowsaverRender` | Current Core Animation API. | The optional fade may not run. | Set `"transition": "none"`; content remains readable without the fade. |
@@ -17,6 +16,7 @@ This document lists the Apple APIs Cowsaver depends on, the effect of a failure,
 
 ## Deliberately excluded dependencies
 
+- `ScreenSaverDefaults` is no longer read. It was the lowest configuration layer under `config.json`, which has been the supported configuration path since the settings window shipped in both front ends. Dropping the merge removed the last use of that legacy API and left the loader with nothing but genuine file content to report on.
 - Metal, MetalKit, SceneKit, SpriteKit, GLKit, and OpenGL are unnecessary for static text presentation. `make check` rejects their imports.
 - WKWebView is unnecessary for the bundled content and would add a browser rendering surface.
 - Quartz Composer is deprecated and is not needed for rotation-based content updates.

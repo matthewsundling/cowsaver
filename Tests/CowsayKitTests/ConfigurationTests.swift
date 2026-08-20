@@ -72,9 +72,32 @@ struct ConfigurationTests {
         #expect(result.warnings.contains { $0.contains("rotationSeconds") })
     }
 
-    @Test func unknownKeysAreIgnoredSilently() {
+    /// A misspelled key used to look exactly like a setting that had no effect (issue #12).
+    @Test func anUnknownKeyWarnsAndNamesItself() {
         let result = load("{\"wrapWidth\": 50, \"somethingElse\": true}")
-        #expect(result.configuration.wrapWidth == 50)
+        #expect(result.configuration.wrapWidth == 50, "the keys it does know still load")
+        #expect(result.warnings.count == 1)
+        #expect(result.warnings.contains { $0.contains("somethingElse") },
+                "the warning must name the key: \(result.warnings)")
+    }
+
+    /// Sorted, so a log grep and a test see the same order every time.
+    @Test func unknownKeysWarnInASettledOrder() {
+        let result = load("{\"zebra\": 1, \"aardvark\": 2}")
+        #expect(result.warnings.count == 2)
+        #expect(result.warnings[0].hasPrefix("aardvark"))
+        #expect(result.warnings[1].hasPrefix("zebra"))
+    }
+
+    /// The other half of the warning: a file using every key Cowsaver has must stay quiet, or
+    /// the warning is noise on a perfectly good config.
+    @Test func noKeyTheLoaderKnowsIsReportedAsUnknown() {
+        var configuration = Configuration()
+        configuration.theme = "amber"   // the one key jsonObject omits while it is unset
+        #expect(Set(configuration.jsonObject.keys) == Set(Configuration.knownKeys))
+
+        let result = Configuration.load(object: configuration.jsonObject)
+        #expect(result.warnings.isEmpty, "warned about a key it knows: \(result.warnings)")
     }
 
     @Test func missingFileYieldsDefaultsAndAWarning() {
@@ -99,6 +122,28 @@ struct ConfigurationTests {
         var configuration = Configuration()
         configuration.wrapWidth = input
         #expect(configuration.effectiveWrapWidth == expected)
+    }
+
+    @Test(arguments: [(-1.0, 0.0), (0.0, 0.0), (0.3, 0.3), (2.0, 0.9)])
+    func sizeVariationIsClamped(input: Double, expected: Double) {
+        var configuration = Configuration()
+        configuration.sizeVariation = input
+        #expect(configuration.effectiveSizeVariation == expected)
+    }
+
+    /// Out of range is not an error, the way `rotationSeconds: 0` is not an error: the value
+    /// is kept as written, clamped in use, and the file loads without a word about it.
+    @Test func anOutOfRangeSizeVariationLoadsAndClampsQuietly() {
+        let result = load("{\"sizeVariation\": 2.0}")
+        #expect(result.configuration.sizeVariation == 2.0)
+        #expect(result.configuration.effectiveSizeVariation == 0.9)
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func sizeVariationOfTheWrongTypeKeepsTheDefault() {
+        let result = load("{\"sizeVariation\": \"a lot\"}")
+        #expect(result.configuration.sizeVariation == 0)
+        #expect(result.warnings.contains { $0.contains("sizeVariation") })
     }
 
     // MARK: Colours and themes
@@ -164,18 +209,7 @@ struct ConfigurationTests {
         #expect(configuration.balloonMode == .think)
     }
 
-    // MARK: Layering
-
-    /// Resolution order is defaults -> ScreenSaverDefaults -> file, and **the file wins**.
-    @Test func fileWinsOverScreenSaverDefaults() {
-        let fromDefaults: [String: Any] = ["wrapWidth": 30, "fontName": "Monaco"]
-        let fromFile: [String: Any] = ["wrapWidth": 70]
-        let merged = fromDefaults.merging(fromFile) { _, file in file }
-
-        let result = Configuration.load(object: merged)
-        #expect(result.configuration.wrapWidth == 70, "the file must win")
-        #expect(result.configuration.fontName == "Monaco", "unset keys fall through")
-    }
+    // MARK: The persisted schema
 
     /// What the Options sheet writes must be exactly what the loader reads back. A key on
     /// one side and not the other is a setting that appears to save and then does nothing.
@@ -189,6 +223,7 @@ struct ConfigurationTests {
         configuration.balloonStyle = "think"
         configuration.fontName = "Monaco"
         configuration.fontSize = 18
+        configuration.sizeVariation = 0.4
         configuration.foreground = "#FFB000"
         configuration.background = "#101010"
         configuration.theme = "amber"
@@ -236,9 +271,9 @@ struct ConfigurationTests {
     }
 
     @Test func knownKeysCoverEveryConfigurableField() {
-        // If a field is added without adding its key, ScreenSaverDefaults silently stops
-        // being able to set it.
-        #expect(Configuration.knownKeys.count == 17)
+        // A field added without its key would be read from the file and then reported as a
+        // key Cowsaver does not know.
+        #expect(Configuration.knownKeys.count == 18)
         #expect(Set(Configuration.knownKeys).count == Configuration.knownKeys.count)
     }
 }
