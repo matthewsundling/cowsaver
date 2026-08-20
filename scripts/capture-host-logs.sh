@@ -20,7 +20,7 @@ make -C "$ROOT" doctor > "$OUT/doctor.txt" 2>&1 || true
 
 echo "==> reading the last ${WINDOW} of host logs (this can take a few minutes)"
 log show --last "$WINDOW" --info --debug --style compact \
-    --predicate 'process == "legacyScreenSaver" OR process == "System Settings"' \
+    --predicate 'process == "legacyScreenSaver" OR process == "System Settings" OR subsystem == "com.matthewsundling.cowsaver"' \
     > "$OUT/host-full.log"
 
 grep -i 'cowsaver' "$OUT/host-full.log" > "$OUT/cowsaver.log" || true
