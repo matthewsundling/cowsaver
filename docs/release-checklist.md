@@ -40,7 +40,7 @@ out badly. Set it back to `false` when the pass is over.
 | Options sheet | Click Options; change a value; OK | The sheet opens inside the screen, and `config.json` holds the new value |
 | App settings | `./build/Cowsaver.app/Contents/MacOS/Cowsaver --configure`, change a value | The saver shows it at the next activation, without reinstalling |
 | Hot corner | Trigger; watch 3 rotations | No clipping, the fade runs |
-| Idle timer | Set 1 min; wait | Activates; no clipping, with the clock on **and** off on macOS 26 and later |
+| Idle timer | Set 1 min; wait | Activates; no clipping |
 | Lock screen return | Wake from the saver with a password required | The unlock prompt is normal |
 | Multi-display | If available: both screens | Each screen fits independently, with different fortunes |
 | Config resilience | Point at a deliberately broken `config.json` | The saver runs on defaults; `cowsaver-cli --validate-config` names every problem, including any misspelled key |

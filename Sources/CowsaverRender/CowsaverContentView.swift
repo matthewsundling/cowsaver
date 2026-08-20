@@ -119,11 +119,26 @@ public final class CowsaverContentView: NSView {
     /// is at least as large as the bounds it was given. The window frame alone decides
     /// this; it was authoritative in every capture, including ones where `screen` was nil.
     private var effectiveCanvas: CGSize {
+        guard let size = lastWindowSize else { return bounds.size }
+        return CGSize(width: min(bounds.width, size.width),
+                      height: min(bounds.height, size.height))
+    }
+
+    /// The most recent window size worth clamping to.
+    ///
+    /// The host drops the view's window while still rendering through it: on macOS 26.6.1
+    /// every unclamped full-screen present in a field capture landed in the same
+    /// millisecond as a `viewDidMoveToWindow` reporting no window. Reading `window?.frame`
+    /// directly means those presents fit to the bounds and draw at twice the size, so the
+    /// last real window stands in until one is attached again.
+    private var lastWindowSize: CGSize?
+
+    /// Record the window size before anything reads `effectiveCanvas`.
+    private func rememberWindowSize() {
         guard let frame = window?.frame,
               frame.width >= Self.smallestMeaningfulWindow,
-              frame.height >= Self.smallestMeaningfulWindow else { return bounds.size }
-        return CGSize(width: min(bounds.width, frame.width),
-                      height: min(bounds.height, frame.height))
+              frame.height >= Self.smallestMeaningfulWindow else { return }
+        lastWindowSize = frame.size
     }
 
     /// Below this, a window frame is a placeholder rather than a description of anything.
@@ -139,6 +154,7 @@ public final class CowsaverContentView: NSView {
 
     /// Show a block of ASCII art. This is the only thing that ever causes drawing.
     public func present(_ block: String, animated: Bool) {
+        rememberWindowSize()
         currentBlock = block
         // Read once: the fit below and the placement in `frame(for:in:)` would disagree if
         // the window changed size between them.
@@ -280,6 +296,7 @@ public final class CowsaverContentView: NSView {
     /// `layout()` fires far more often than the canvas changes, and re-presenting identical
     /// geometry would redraw and re-log for nothing.
     private func refitIfCanvasChanged() {
+        rememberWindowSize()
         guard !currentBlock.isEmpty, effectiveCanvas != presentedCanvas else { return }
         present(currentBlock, animated: false)
     }

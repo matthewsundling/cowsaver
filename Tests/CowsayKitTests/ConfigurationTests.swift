@@ -276,6 +276,16 @@ struct ConfigurationTests {
         #expect(Configuration.knownKeys.count == 18)
         #expect(Set(Configuration.knownKeys).count == Configuration.knownKeys.count)
     }
+
+    /// A named theme supplies both colours, so the default one has to step aside for a file
+    /// that states colours of its own.
+    @Test func coloursInTheFileBeatTheDefaultTheme() {
+        let result = Configuration.load(object: ["foreground": "#FF0000"])
+        #expect(result.configuration.theme == nil)
+        #expect(result.configuration.resolvedForeground.red > 0.9)
+        #expect(result.configuration.resolvedForeground.green < 0.1)
+        #expect(result.warnings.isEmpty, "\(result.warnings)")
+    }
 }
 
 // MARK: - Engine
