@@ -46,9 +46,8 @@ The sheet and the settings window are the same window, and both write the same
 control in that window: `face`, `fontName`, `foreground`, `background`, `weightByFile`, and
 `debugFrame`. The window preserves them; it writes back every key it read.
 
-The installed saver also reads any values stored in `ScreenSaverDefaults` under
-`com.matthewsundling.cowsaver`, layered under the file. Built-in defaults come first,
-`ScreenSaverDefaults` next, and `config.json` last, so the file always wins.
+A key the file does not hold takes Cowsaver's built-in default; nothing else is layered
+underneath.
 
 Settings saved from either window take effect immediately: the running view reloads its
 colours, rebuilds its content engine, and rotates. A hand edit to `config.json` is read the
@@ -66,6 +65,7 @@ next time the screensaver starts, so stop and start it afterwards.
 | `balloonStyle` | string | `"say"` | `say` or `think`; any other value is `say`. |
 | `fontName` | string | `"Menlo"` | Any installed fixed-pitch face; otherwise a fallback chain. |
 | `fontSize` | number | `0` | `0` auto-fits. A fitted size lands between 6 and 96 points. |
+| `sizeVariation` | number | `0` | Clamped to 0–0.9 in use. Applies to auto-fit only. |
 | `foreground` | string | `"#33FF66"` | `#RGB` or `#RRGGBB`, with or without the `#`. |
 | `background` | string | `"#000000"` | Same as `foreground`. |
 | `theme` | string | unset | `green-phosphor`, `amber`, `paperwhite`, `solarized-dark`. |
@@ -113,6 +113,12 @@ at one second.
   down past that floor rather than clipped. Any other value
   pins that point size and is taken as deliberate — a block too large for the screen is
   clipped rather than shrunk.
+- **`sizeVariation`** draws each rotation below the fitted size, by up to that fraction of
+  it: `0.3` picks a size somewhere between 70% and 100% of the fit, keeps it for that
+  rotation, and picks again at the next one. `0`, the default, draws every rotation at the
+  fitted size. It applies to auto-fit only — a `fontSize` other than `0` is an explicit
+  choice and is used as written. Containment still runs afterwards, so a varied block is
+  kept inside the screen like any other.
 - **`reposition`** places each new block at a random position, kept off the very edge. Set
   it to `false` to centre every block.
 - **`fontName`** must name an installed fixed-pitch face; the balloon borders only line up
@@ -189,9 +195,10 @@ on its own, so one bad value costs you that value and nothing else:
   black.
 - A file that is not valid JSON, or is JSON but not an object, warns and yields the shipped
   defaults entire.
-- **Unknown keys are ignored silently.** There is no warning, so a misspelled key looks
-  exactly like a setting that had no effect. Check spelling against the table above, or
-  against `config.example.json`, when a change does not take.
+- **A key Cowsaver does not know is named and ignored**, so a misspelled one no longer looks
+  exactly like a setting that had no effect: `"wrapWdith": 60` warns `wrapWdith: not a
+  setting Cowsaver knows; ignoring it`. Check the spelling against the table above, or
+  against `config.example.json`.
 
 The screensaver logs these warnings rather than showing them; there is nobody at the screen
 to show an error to. Read them with:
@@ -214,7 +221,7 @@ To start from the shipped defaults instead of an existing file:
 .build/debug/cowsaver-cli --print-default-config > config.json
 ```
 
-That output has 16 keys rather than 17: `theme` is unset by default, and Cowsaver omits an
+That output has 17 keys rather than 18: `theme` is unset by default, and Cowsaver omits an
 unset theme rather than writing it empty, which keeps the raw `foreground` and `background`
 values active. `config.example.json` is the same file with `"theme": "green-phosphor"`
 added.
@@ -245,6 +252,7 @@ with comments added:
   "randomCow" : true,                  // false pins the first loadable cowfile above
   "reposition" : true,                 // false centres every fortune
   "rotationSeconds" : 45,              // clamped to 1-86400
+  "sizeVariation" : 0,                 // above 0, varies the fitted size per rotation
   "theme" : "green-phosphor",          // remove this key to use the two colours above
   "transition" : "fade",               // "none" disables the crossfade
   "weightByFile" : false,              // true favours records from larger fortune files

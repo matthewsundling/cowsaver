@@ -18,6 +18,10 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     private var content: CowsaverContentView?
     private var engine: CowsaverEngine?
     private var configuration = Configuration()
+    /// The config file content `configuration` was decoded from, or nil when there was no
+    /// readable file. A reused view compares against this to tell an edited file from the
+    /// one already in effect.
+    private var configurationData: Data?
     private var isRegistered = false
 
     // MARK: Lifecycle
@@ -34,7 +38,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         wantsLayer = true
         autoresizingMask = [.width, .height]
 
-        let resolved = Self.resolveConfiguration()
+        let file = Self.configurationFile()
+        let resolved = Self.resolveConfiguration(file)
+        configurationData = file?.data
         configuration = resolved.configuration
         for warning in resolved.warnings { log(warning) }
 
@@ -86,6 +92,7 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     public override func startAnimation() {
         super.startAnimation()
         logGeometry("startAnimation")
+        reloadConfigurationIfChanged()
 
         // A preview renders its first frame but does not join the shared rotation timer.
         guard !effectivelyPreview else {
@@ -170,6 +177,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
                 return
             }
             self.configuration = updated
+            // Take the file content the sheet just wrote, so the next activation does not
+            // re-apply a configuration that has already arrived through this path.
+            self.configurationData = Self.configurationFile()?.data
             self.content?.apply(configuration: updated)
             self.rebuildEngine()
             // Re-register so a changed rotation interval takes effect in this host process,
@@ -197,31 +207,59 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     // MARK: Configuration
 
-    private static func resolveConfiguration() -> Configuration.LoadResult {
-        // Layer built-in defaults, ScreenSaverDefaults, then config.json; the file has the
-        // highest priority.
-        var merged: [String: Any] = [:]
+    /// Re-read `config.json` when its content differs from what this view last loaded.
+    ///
+    /// The legacy host can reuse a view across activations, and a view that resolves its
+    /// configuration only in `init` keeps its birth configuration forever, so an edited file
+    /// reaches nothing but a freshly created view (issue #10). Content rather than mtime:
+    /// the file is a few hundred bytes, and byte equality has no clock-granularity edge
+    /// cases.
+    ///
+    /// Applies the result the way the sheet's save path does. `startAnimation` renders after
+    /// this returns, immediately for a preview and a runloop turn later otherwise, so there
+    /// is no rotation to ask for here.
+    private func reloadConfigurationIfChanged() {
+        let file = Self.configurationFile()
+        guard file?.data != configurationData else { return }
+        configurationData = file?.data
 
-        if let defaults = ScreenSaverDefaults(forModuleWithName: "com.matthewsundling.cowsaver") {
-            for key in Configuration.knownKeys {
-                if let value = defaults.object(forKey: key) { merged[key] = value }
-            }
+        let resolved = Self.resolveConfiguration(file)
+        log("config.json changed since this view loaded it; reloading")
+        for warning in resolved.warnings { log(warning) }
+        configuration = resolved.configuration
+        content?.apply(configuration: configuration)
+        rebuildEngine()
+        // Re-register so a changed rotation interval takes effect in this host process,
+        // which outlives the view that first registered one.
+        if isRegistered {
+            RotationCoordinator.shared.register(self, interval: configuration.rotationInterval)
         }
+    }
 
-        var warnings: [String] = []
-        if let url = ResourceLocations.configurationURL() {
-            if let data = FileManager.default.contents(atPath: url.path),
-               let parsed = try? JSONSerialization.jsonObject(with: data),
-               let object = parsed as? [String: Any] {
-                merged.merge(object) { _, fromFile in fromFile }
-            } else {
-                warnings.append("config.json at \(url.path) is unreadable or not a JSON object; ignoring it")
-            }
+    /// The config file in the search order and its content. Nil when there is no file at
+    /// all; nil content when the file exists but could not be read.
+    private static func configurationFile() -> (url: URL, data: Data?)? {
+        guard let url = ResourceLocations.configurationURL() else { return nil }
+        return (url, FileManager.default.contents(atPath: url.path))
+    }
+
+    /// `config.json` is the whole configuration; there is no second store layered under it.
+    ///
+    /// `Configuration.load` already warns about a malformed file. No file at all is the
+    /// ordinary case and says nothing; a file that exists but cannot be read warns here.
+    private static func resolveConfiguration(
+        _ file: (url: URL, data: Data?)?
+    ) -> Configuration.LoadResult {
+        guard let file else {
+            return Configuration.LoadResult(configuration: Configuration(), warnings: [])
         }
-
-        let result = Configuration.load(object: merged)
-        return Configuration.LoadResult(configuration: result.configuration,
-                                        warnings: warnings + result.warnings)
+        guard let data = file.data else {
+            return Configuration.LoadResult(
+                configuration: Configuration(),
+                warnings: ["config.json at \(file.url.path) is unreadable; using defaults"]
+            )
+        }
+        return Configuration.load(data: data)
     }
 
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "saver")

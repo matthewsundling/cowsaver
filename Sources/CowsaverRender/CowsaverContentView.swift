@@ -20,7 +20,8 @@ import os.log
 ///   `opacity`, ~0.6s, once per rotation. Nothing animates position, and nothing animates
 ///   continuously.
 /// - **Rule 5, reposition rather than drift.** Each rotation places the block at a new
-///   random point inside a safe inset. It changes position only when content changes.
+///   random point inside a safe inset, and `sizeVariation` draws it at a new size. Both are
+///   one discrete step per rotation rather than anything that animates.
 public final class CowsaverContentView: NSView {
     private let textLayer = CATextLayer()
     private var theme: Theme
@@ -148,7 +149,8 @@ public final class CowsaverContentView: NSView {
         let metrics = configuration.fontSize > 0
             ? Layout.metrics(block: block, theme: theme,
                              fontSize: CGFloat(configuration.fontSize))
-            : Layout.contained(Layout.fit(block: block, theme: theme, in: canvas),
+            : Layout.contained(varied(Layout.fit(block: block, theme: theme, in: canvas),
+                                      of: block),
                                in: canvas)
 
         let font = theme.font(ofSize: metrics.fontSize)
@@ -193,6 +195,28 @@ public final class CowsaverContentView: NSView {
             "fontSize=\(Self.format(metrics.fontSize)) " +
             "textFrame=\(Self.format(textLayer.frame))")
     }
+
+    /// Draw this rotation below the fitted size, by as much as `sizeVariation` allows.
+    ///
+    /// The factor is uniform in `(1 - effectiveSizeVariation) ... 1`, and the metrics are
+    /// recomputed at the size it produces rather than scaled, so the text size still comes
+    /// from the font. It stays at or above `Layout.fit`'s floor; containment runs afterwards
+    /// and keeps the last word, which shrinking alone cannot threaten.
+    ///
+    /// At `0` nothing is drawn from the generator, so a configuration that does not ask for
+    /// size variation keeps the exact random sequence, and the exact frames, it has today.
+    private func varied(_ metrics: LayoutMetrics, of block: String) -> LayoutMetrics {
+        let variation = configuration.effectiveSizeVariation
+        guard variation > 0 else { return metrics }
+
+        let factor = 1 - CGFloat(variation) * unitRandom()
+        let size = max(metrics.fontSize * factor, Self.smallestFittedSize)
+        guard size < metrics.fontSize else { return metrics }
+        return Layout.metrics(block: block, theme: theme, fontSize: size)
+    }
+
+    /// `Layout.fit`'s lower bound, which only containment may go below.
+    private static let smallestFittedSize: CGFloat = 6
 
     /// A new random position inside a safe inset, or centred if repositioning is off.
     ///

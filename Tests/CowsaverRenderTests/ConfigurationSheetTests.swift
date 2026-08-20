@@ -66,6 +66,7 @@ struct ConfigurationSheetTests {
         sheet.adaptiveWrapBox.state = .off
         sheet.randomCowBox.state = .off
         sheet.repositionBox.state = .off
+        sheet.sizeVariationBox.state = .on
         sheet.transitionBox.state = .off
         for box in sheet.cowfileBoxes {
             box.state = ["dragon", "tux"].contains(box.title) ? .on : .off
@@ -83,8 +84,35 @@ struct ConfigurationSheetTests {
         #expect(!result.adaptiveWrap)
         #expect(!result.randomCow)
         #expect(!result.reposition)
+        #expect(result.sizeVariation == 0.3, "checked, with no amount in the file to keep")
         #expect(result.transition == "none")
         #expect(result.cowfiles == ["dragon", "tux"], "checked names, in the order listed")
+    }
+
+    /// The box is a shorthand for an amount, and it must not overwrite one already chosen:
+    /// `sizeVariation` is a number in the file, and only the file can express 0.75.
+    @Test func checkedSizeVariationKeepsAHandEditedAmount() throws {
+        var configuration = Configuration()
+        configuration.sizeVariation = 0.75
+        let saved = Saved()
+        let sheet = makeSheet(configuration, saving: saved)
+
+        #expect(sheet.sizeVariationBox.state == .on, "a nonzero amount shows as checked")
+        sheet.save()
+
+        #expect(try #require(saved.configuration).sizeVariation == 0.75)
+    }
+
+    @Test func uncheckedSizeVariationSavesZero() throws {
+        var configuration = Configuration()
+        configuration.sizeVariation = 0.75
+        let saved = Saved()
+        let sheet = makeSheet(configuration, saving: saved)
+
+        sheet.sizeVariationBox.state = .off
+        sheet.save()
+
+        #expect(try #require(saved.configuration).sizeVariation == 0)
     }
 
     /// "All" and "None" are the same instruction, and it is the one the engine already

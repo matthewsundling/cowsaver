@@ -27,7 +27,7 @@ The core keeps byte-level text handling because cowsay counts bytes rather than 
 
 ### `CowsaverSaver`
 
-`CowsaverSaver` contains the `ScreenSaverView` subclass, Options sheet, and `ScreenSaverDefaults` integration. It is built by the Makefile because SwiftPM has no product type for a loadable screensaver bundle. The legacy ScreenSaver API is contained here; configuration is represented by the shared `Configuration` type.
+`CowsaverSaver` contains the `ScreenSaverView` subclass and the Options sheet. It is built by the Makefile because SwiftPM has no product type for a loadable screensaver bundle. The legacy ScreenSaver API is contained here; configuration is represented by the shared `Configuration` type.
 
 ### `CowsaverApp`
 
