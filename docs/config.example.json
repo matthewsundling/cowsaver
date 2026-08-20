@@ -1,0 +1,24 @@
+{
+  "adaptiveWrap" : true,
+  "background" : "#000000",
+  "balloonStyle" : "say",
+  "cowfiles" : [
+    "stegosaurus",
+    "default",
+    "tux",
+    "dragon"
+  ],
+  "debugFrame" : false,
+  "face" : "default",
+  "fontName" : "Menlo",
+  "fontSize" : 0,
+  "foreground" : "#33FF66",
+  "maxFortuneLines" : 60,
+  "randomCow" : true,
+  "reposition" : true,
+  "rotationSeconds" : 45,
+  "theme" : "green-phosphor",
+  "transition" : "fade",
+  "weightByFile" : false,
+  "wrapWidth" : 40
+}

@@ -49,6 +49,8 @@ make install
 
 Then open System Settings → Wallpaper → Screen Saver and select Cowsaver. macOS may ask you to approve the unsigned screensaver the first time it runs.
 
+The [install guide](docs/install.md) walks through this step by step, from a Mac with nothing installed to a running screensaver, and covers what to do when something does not work.
+
 To remove it:
 
 ```sh
@@ -73,51 +75,9 @@ Cowsaver reads its settings from:
 
 Create or edit that file to change the rotation interval, cow selection, appearance, and layout. The Options sheet is a convenience when macOS makes it available; the config file is the supported configuration path.
 
-A complete example:
+The [configuration reference](docs/configuration.md) documents every key, its default, and what happens when a value is wrong. [`docs/config.example.json`](docs/config.example.json) is a complete file to copy and edit; `.build/debug/cowsaver-cli --print-default-config` prints the shipped defaults.
 
-```json
-{
-  "rotationSeconds": 45,
-  "wrapWidth": 40,
-  "cowfiles": ["stegosaurus", "default", "tux", "dragon"],
-  "randomCow": true,
-  "balloonStyle": "say",
-  "face": "default",
-  "theme": "green-phosphor",
-  "fontName": "Menlo",
-  "fontSize": 0,
-  "transition": "fade",
-  "reposition": true,
-  "adaptiveWrap": true,
-  "maxFortuneLines": 60
-}
-```
-
-- **`rotationSeconds`** controls how often Cowsaver chooses a new fortune.
-- **`cowfiles`** chooses the cowfiles Cowsaver may use. Set **`randomCow`** to `false` to always use the first name in the list.
-- **`balloonStyle`** is either `say` or `think`. Leave **`face`** as `default` unless you want to use an advanced cowsay face mode; it is available only through `config.json`.
-- **`fontSize`** uses `0` to fit the text to the screen.
-- **`theme`** can be `green-phosphor` (the default), `amber`, `paperwhite`, or `solarized-dark`. To use your own colours, omit `theme` and set **`foreground`** and **`background`** to hex colours.
-- **`wrapWidth`** is the narrowest balloon width. With **`adaptiveWrap`** enabled, Cowsaver may use a wider balloon when that makes the text meaningfully easier to read.
-- **`maxFortuneLines`** limits the height of a fortune after wrapping; set it to `0` for no limit.
-- Set **`transition`** to `none` to disable the fade, and **`reposition`** to `false` to keep the content in one place.
-
-Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4. The four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The 47 bundled cowfile names:
-
-```text
-actually            alpaca              beavis.zen          blowfish
-bong                bud-frogs           bunny               cheese
-cower               cupcake             daemon              default
-dragon              dragon-and-cow      elephant            elephant-in-snake
-eyes                flaming-sheep       fox                 ghostbusters
-head-in             hellokitty          kiss                kitty
-koala               kosh                llama               luke-koala
-mech-and-cow        meow                milk                moofasa
-moose               mutilated           ren                 sheep
-skeleton            stegosaurus         stimpy              supermilker
-surgery             turkey              turtle              tux
-vader               vader-koala         www
-```
+Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4; the four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The [configuration reference](docs/configuration.md#the-bundled-cowfiles) lists the 47 names.
 
 The screensaver's Options sheet and the app's settings window are two views of the same window, and both write `config.json` — there is no second store. Invalid values fall back to their defaults without preventing the screensaver from running.
 
@@ -221,6 +181,8 @@ Regenerating the committed golden output requires cowsay 3.8.4 (`brew install co
 | Document                                                     | Description                                                  |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | [Architecture](docs/architecture.md)                         | Module layout and the boundary between the reusable core and macOS front ends. |
+| [Install guide](docs/install.md)                             | Installing on a clean Mac, reinstalling, and troubleshooting. |
+| [Configuration](docs/configuration.md)                       | Every configuration key, its default, and its error behavior. |
 | [Power notes](docs/power.md)                                 | The low-activity design, measurement context, and limitations. |
 | [Compatibility](docs/compatibility.md)                       | macOS versions tested so far and known platform behavior.    |
 | [Platform risks](docs/platform-risk.md)                      | The Apple APIs Cowsaver relies on and its fallback paths.    |
