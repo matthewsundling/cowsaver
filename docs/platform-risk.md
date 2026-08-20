@@ -24,5 +24,3 @@ This document lists the Apple APIs Cowsaver depends on, the effect of a failure,
 - Cowsaver's tests use Swift Testing rather than XCTest. The products build with Command Line Tools, but the test suite requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 - Apple has not published a public App Extension replacement for legacy screensavers.
 - An `.xcodeproj` is not required by the Package.swift and Makefile build.
-
-See [architecture.md](architecture.md) for the module boundaries.

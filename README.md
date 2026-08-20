@@ -77,7 +77,7 @@ Create or edit that file to change the rotation interval, cow selection, appeara
 
 The [configuration reference](docs/configuration.md) documents every key, its default, and what happens when a value is wrong. [`docs/config.example.json`](docs/config.example.json) is a complete file to copy and edit; `.build/debug/cowsaver-cli --print-default-config` prints the shipped defaults.
 
-Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4; the four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The [configuration reference](docs/configuration.md#the-bundled-cowfiles) lists the 47 names.
+Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4; the four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The [configuration reference](docs/configuration.md) lists the 47 names.
 
 The screensaver's Options sheet and the app's settings window are two views of the same window, and both write `config.json` — there is no second store. Invalid values fall back to their defaults without preventing the screensaver from running.
 

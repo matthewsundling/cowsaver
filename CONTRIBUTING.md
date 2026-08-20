@@ -1,6 +1,6 @@
 # Contributing
 
-Patches are welcome. This guide explains the project constraints contributors should preserve and the checks that support them. Participation in the project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Patches are welcome. This guide explains the project constraints contributors should preserve and the checks that support them. Participation in the project is governed by `CODE_OF_CONDUCT.md`.
 
 ## Build and test
 
@@ -23,7 +23,7 @@ If a proposed feature genuinely requires one of these frameworks, discuss its ef
 
 ### Do not add an application-owned render loop
 
-Cowsaver does not override `animateOneFrame()`. `RotationCoordinator` schedules content changes, while `ScreenSaverView` retains its required infrequent default callback. See [docs/power.md](docs/power.md) for the runtime model and measurement limits.
+Cowsaver does not override `animateOneFrame()`. `RotationCoordinator` schedules content changes, while `ScreenSaverView` retains its required infrequent default callback. See `docs/power.md` for the runtime model and measurement limits.
 
 ### Keep `CowsayKit` Foundation-only
 
@@ -45,7 +45,7 @@ A screensaver should remain usable when a bundled or imported resource is malfor
 
 ## Content
 
-Cow art and fortune quotations are third-party material. See [credits.md](credits.md), `Resources/cows/provenance.md`, and `Resources/fortune-curated/provenance.md`.
+Cow art and fortune quotations are third-party material. See `credits.md`, `Resources/cows/provenance.md`, and `Resources/fortune-curated/provenance.md`.
 
 - Preserve `##` comment headers in `.cow` files verbatim; they carry artist attribution.
 - Do not add records to `Resources/fortune-upstream/`; it mirrors fortune-mod 9708 and its checksums must continue to verify.
@@ -62,7 +62,7 @@ Typically, comments lead with one short sentence that stands alone, then a blank
 
 ## Reporting compatibility
 
-If you build or run Cowsaver on a macOS version not listed in [docs/compatibility.md](docs/compatibility.md), please add a row. `make doctor` prints the information needed for a useful report.
+If you build or run Cowsaver on a macOS version not listed in `docs/compatibility.md`, please add a row. `make doctor` prints the information needed for a useful report.
 
 ## Security reports
 

@@ -52,12 +52,11 @@ configuration file directly. The file is the supported configuration path and re
 setting; the Options sheet is a convenience, and on some macOS versions it does not open at
 all.
 
-See the [configuration reference](configuration.md) for the file's location and every key it
-understands, and [`config.example.json`](config.example.json) for a complete file to copy
-and edit.
+See `docs/configuration.md` for the file's location and every key it understands, and
+`docs/config.example.json` for a complete file to copy and edit.
 
-To use fortune files you already have on your Mac, see
-[Your own collection](../README.md#your-own-collection) in the README.
+To use fortune files you already have on your Mac, see the "Your own collection" section
+of the README.
 
 ## Reinstalling: restart the host
 
@@ -99,7 +98,7 @@ make cli
 That prints the search order with a `*` beside the file in use, and then either `ok` or the
 same warnings the screensaver writes to the log. A misspelled key is one of those warnings:
 an unknown key is named and ignored, so a setting that never took effect says so here. See
-[when a value is wrong](configuration.md#when-a-value-is-wrong).
+`docs/configuration.md` for what happens when a value is wrong.
 
 Other common cases:
 
@@ -114,7 +113,7 @@ Other common cases:
   hosting window rather than the resized view, and the settings sheet caps its height — but
   no Tahoe machine has verified either fix yet. If clicking Options produces nothing at all,
   relaunching System Settings clears it; `Cowsaver.app --configure` opens the same settings
-  window whether or not it does. See the [compatibility notes](compatibility.md).
+  window whether or not it does. See `docs/compatibility.md`.
 
 If a problem survives all of that, open an issue and include the `make doctor` output.
 
@@ -147,5 +146,5 @@ make uninstall
 ```
 
 That removes `~/Library/Screen Savers/Cowsaver.saver`. Your `config.json` and any imported
-fortune files are left where they are; delete the `Cowsaver` directory named in the
-[configuration reference](configuration.md#where-the-file-lives) to remove those too.
+fortune files are left where they are; delete the `Cowsaver` directory named in
+`docs/configuration.md` to remove those too.

@@ -3,8 +3,8 @@
 Cowsaver keeps its settings in one JSON file. This document describes every key that file
 understands, what each one does, and what happens when a value is wrong.
 
-[`config.example.json`](config.example.json) is a complete, loadable file containing every
-key at its shipped value. Copy it to the path below and edit it.
+`docs/config.example.json` is a complete, loadable file containing every key at its shipped
+value. Copy it to the path below and edit it.
 
 ## Where the file lives
 
@@ -228,8 +228,8 @@ added.
 
 ## The example file, annotated
 
-[`config.example.json`](config.example.json) is loadable as it stands. JSON has no comments,
-so the annotations are here instead. **The block below is not loadable** — it is the example
+`docs/config.example.json` is loadable as it stands. JSON has no comments, so the
+annotations are here instead. **The block below is not loadable** — it is the example
 with comments added:
 
 ```jsonc
@@ -262,9 +262,3 @@ with comments added:
 
 Keys may appear in any order; the settings window writes them sorted, and so does
 `--print-default-config`.
-
-## See also
-
-- [Install guide](install.md) — installing Cowsaver, and what to do when it misbehaves.
-- [Compatibility](compatibility.md) — tested macOS versions and known platform behavior.
-- [README](../README.md#your-own-collection) — importing your own fortune files.
