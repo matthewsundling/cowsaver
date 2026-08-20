@@ -140,4 +140,24 @@ struct WindowClampTests {
                 "a window grown to the bounds did not re-fit larger")
         #expect(CGRect(origin: .zero, size: points).contains(hosted.presentedTextFrame))
     }
+
+    /// A rotation that lands after the host removes the window still fits the window.
+    ///
+    /// In the 26.6.1 capture every unclamped full-screen present shared a millisecond with a
+    /// `viewDidMoveToWindow` reporting no window, so the clamp has to survive the detach.
+    @Test func aDetachedViewKeepsFittingToTheWindowItLastHad() {
+        let host = window(points)
+        let hosted = view(pixels, in: host, configuration: centred)
+        hosted.present(block(), animated: false)
+        let attached = hosted.presentedMetrics.fontSize
+
+        hosted.removeFromSuperview()
+        #expect(hosted.window == nil, "the view must actually be detached")
+        hosted.present(block(), animated: false)
+
+        #expect(hosted.presentedMetrics.fontSize == attached,
+                "a detached view re-fitted to its oversized bounds")
+        #expect(CGRect(origin: .zero, size: points).contains(hosted.presentedTextFrame),
+                "\(hosted.presentedTextFrame) escapes the visible \(points)")
+    }
 }
