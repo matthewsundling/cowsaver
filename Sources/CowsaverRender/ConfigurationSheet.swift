@@ -93,8 +93,10 @@ public final class ConfigurationSheet: NSObject {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
-        // No bottom inset: the gap below the last control is the button row's own spacing.
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 0, right: 20)
+        // The bottom inset is what keeps the last control clear of the scroll view's edge:
+        // the window is sized to this stack's fitting height, so a zero inset ends it
+        // flush with the final button and clips its lower edge.
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         rotationField = NSTextField(string: "")
