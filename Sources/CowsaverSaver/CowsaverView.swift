@@ -153,9 +153,15 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     /// The sheet edits `config.json`, which is also the runtime configuration file.
     private var sheet: ConfigurationSheet?
 
-    public override var hasConfigureSheet: Bool { true }
+    public override var hasConfigureSheet: Bool {
+        // Logged because a host that never asks is indistinguishable, from the outside,
+        // from a sheet that fails to open (issue #1). One capture settles which it is.
+        log("hasConfigureSheet queried")
+        return true
+    }
 
     public override var configureSheet: NSWindow? {
+        log("configureSheet requested")
         let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
             guard let self else { return }
             if let error = ConfigurationSheet.persist(updated) {
