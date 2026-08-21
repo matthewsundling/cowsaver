@@ -44,14 +44,26 @@ It prints the search order with a `*` beside the file it found, then validates i
 The sheet and the settings window are the same window, and both write the same
 `config.json` — there is no second store. Six keys are file-only, because they have no
 control in that window: `face`, `fontName`, `foreground`, `background`, `weightByFile`, and
-`debugFrame`. The window preserves them; it writes back every key it read.
+`debugFrame`. The window preserves them; it writes back every key it read. Restore Defaults
+changes only the controls in the window; it writes nothing until you click OK, and it does
+not touch the six file-only settings.
+
+The window accepts the same supported ranges as the file — see the table below — but it asks
+you to correct an invalid value instead of clamping it the way a hand-edited file would.
+`rotationSeconds`, `wrapWidth`, and `maxFortuneLines` must be whole numbers; `fontSize` may be
+a decimal, such as `18.5`, and keeps that exact value. An out-of-range, fractional, or
+unreadable entry leaves OK without saving: the field is selected with an explanation next to
+the buttons, and every other value you typed stays exactly as you left it.
 
 A key the file does not hold takes Cowsaver's built-in default; nothing else is layered
 underneath.
 
-Settings saved from either window take effect immediately: the running view reloads its
-colours, rebuilds its content engine, and rotates. A hand edit to `config.json` is read the
-next time the screensaver starts, so stop and start it afterwards.
+A setting only takes effect once `config.json` has actually been written. A successful save
+updates the running view immediately — colours, content engine, and rotation. A failed write
+(a full disk, a permissions problem) leaves the window open with every value intact and
+reports why, next to the buttons, without changing anything Cowsaver is showing; correcting
+the problem and clicking OK again retries with the values still in the window. A hand edit to
+`config.json` is read the next time the screensaver starts, so stop and start it afterwards.
 
 ## The keys
 

@@ -29,9 +29,10 @@ func printValidation(_ result: Configuration.LoadResult) {
 /// `--print-default-config`: the shipped defaults as a config file, for someone who wants a
 /// starting point rather than a blank editor.
 ///
-/// Written with the same options `ConfigurationSheet.persist` uses, so the output is the file
-/// the settings window would have written. An unset `theme` is omitted, exactly as it is on
-/// disk, which leaves the raw `foreground` and `background` values active.
+/// Written with the same JSON formatting options the settings window uses to write
+/// `config.json`, so the output is the file the settings window would have written. An unset
+/// `theme` is omitted, exactly as it is on disk, which leaves the raw `foreground` and
+/// `background` values active.
 func printDefaultConfig() -> Never {
     guard let data = try? JSONSerialization.data(withJSONObject: Configuration().jsonObject,
                                                  options: [.prettyPrinted, .sortedKeys]) else {

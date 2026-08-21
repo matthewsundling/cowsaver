@@ -170,12 +170,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     public override var configureSheet: NSWindow? {
         log("configureSheet requested")
+        // The sheet has already validated and written config.json by the time this runs.
         let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
             guard let self else { return }
-            if let error = ConfigurationSheet.persist(updated) {
-                self.log("could not save settings: \(error)")
-                return
-            }
             self.configuration = updated
             // Take the file content the sheet just wrote, so the next activation does not
             // re-apply a configuration that has already arrived through this path.
