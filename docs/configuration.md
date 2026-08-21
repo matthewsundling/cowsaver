@@ -57,27 +57,35 @@ next time the screensaver starts, so stop and start it afterwards.
 
 | Key | Type | Default | Range and clamping |
 |---|---|---|---|
-| `rotationSeconds` | number | `45` | Clamped to 1–86 400 in use. |
-| `wrapWidth` | integer | `40` | Clamped to 2–500 in use. |
+| `rotationSeconds` | whole number | `45` | 1–600 seconds. |
+| `wrapWidth` | whole number | `40` | 2–500 columns. |
 | `cowfiles` | array of strings | `["stegosaurus", "default", "tux", "dragon"]` | `[]` means every bundled cowfile. |
 | `randomCow` | boolean | `true` | — |
 | `face` | string | `"default"` | Face names, single letters, or a comma- or space-separated list. |
 | `balloonStyle` | string | `"say"` | `say` or `think`; any other value is `say`. |
 | `fontName` | string | `"Menlo"` | Any installed fixed-pitch face; otherwise a fallback chain. |
-| `fontSize` | number | `0` | `0` auto-fits. A fitted size lands between 6 and 96 points. |
-| `sizeVariation` | number | `0` | Clamped to 0–0.9 in use. Applies to auto-fit only. |
+| `fontSize` | number | `0` | `0` auto-fits; otherwise 6–144 points. Decimal pinned sizes are valid. |
+| `sizeVariation` | number | `0` | 0–0.9. Applies to auto-fit only. |
 | `foreground` | string | `"#33FF66"` | `#RGB` or `#RRGGBB`, with or without the `#`. |
 | `background` | string | `"#000000"` | Same as `foreground`. |
 | `theme` | string | `green-phosphor` | `green-phosphor`, `amber`, `paperwhite`, `solarized-dark`. |
 | `transition` | string | `"fade"` | `none` disables the fade; any other value keeps it. |
 | `reposition` | boolean | `true` | — |
 | `adaptiveWrap` | boolean | `true` | — |
-| `maxFortuneLines` | integer | `60` | `0` or less means no limit. |
+| `maxFortuneLines` | whole number | `60` | 0–100; `0` means no limit. |
 | `weightByFile` | boolean | `false` | — |
 | `debugFrame` | boolean | `false` | File-only; no control in the settings window. |
 
-Clamping is silent. `"rotationSeconds": 0` is not an error and produces no warning; it runs
-at one second.
+JSON booleans and numbers are different types: boolean settings accept only `true` or `false`,
+so `0` and `1` are not booleans. Numeric settings reject booleans. `rotationSeconds`,
+`wrapWidth`, and `maxFortuneLines` require whole numbers, although `40.0` is accepted. `fontSize`
+and `sizeVariation` may be decimal values, but every numeric value must be finite.
+
+Wrong types, fractions in whole-number settings, and non-finite values use that setting's default
+and warn. A finite value outside its range clamps to the nearest supported value and warns. For
+`fontSize`, a negative value becomes `0`, a positive value below `6` becomes `6`, and a value
+above `144` becomes `144`. A problem with one field never prevents valid settings in the same
+file from loading.
 
 ### Content
 
@@ -110,9 +118,9 @@ at one second.
 - **`fontSize`** of `0` fits each block to the screen: one measurement per rotation picks
   the largest size that fits inside a 10% margin, between 6 and 96 points. When even 6
   points cannot fit — a Settings preview pane rather than a screen — the block is scaled
-  down past that floor rather than clipped. Any other value
-  pins that point size and is taken as deliberate — a block too large for the screen is
-  clipped rather than shrunk.
+  down past that floor rather than clipped. A finite pinned value from 6 through 144, including
+  decimals such as `18.5`, is taken as deliberate — a block too large for the screen is clipped
+  rather than shrunk.
 - **`sizeVariation`** draws each rotation below the fitted size, by up to that fraction of
   it: `0.3` picks a size somewhere between 70% and 100% of the fit, keeps it for that
   rotation, and picks again at the next one. `0`, the default, draws every rotation at the
@@ -190,8 +198,10 @@ vader               vader-koala         www
 Loading a configuration never fails and never stops the screensaver. Every field is decoded
 on its own, so one bad value costs you that value and nothing else:
 
-- A value of the wrong type is ignored and the default is used: `"wrapWidth": "wide"` warns
-  `wrapWidth: expected a number, ignoring`.
+- A value of the wrong type, a non-finite number, or a fraction where a whole number is required
+  uses that setting's default and warns: `"wrapWidth": "wide"` warns that it expected a number.
+- A finite number outside a setting's supported range is clamped to its nearest supported value
+  and warns which value was used.
 - `cowfiles` warns `expected a list of names` unless it is a list of strings.
 - A `theme` that is not a preset warns and is dropped, leaving `foreground` and `background`
   in effect.
@@ -254,12 +264,12 @@ with comments added:
   "maxFortuneLines" : 60,              // taller fortunes are never shown; 0 for no limit
   "randomCow" : true,                  // false pins the first loadable cowfile above
   "reposition" : true,                 // false centres every fortune
-  "rotationSeconds" : 45,              // clamped to 1-86400
+  "rotationSeconds" : 45,              // whole seconds, 1-600
   "sizeVariation" : 0,                 // above 0, varies the fitted size per rotation
   "theme" : "green-phosphor",          // remove this key to use the two colours above
   "transition" : "fade",               // "none" disables the crossfade
   "weightByFile" : false,              // true favours records from larger fortune files
-  "wrapWidth" : 40                     // narrowest balloon, in columns; clamped to 2-500
+  "wrapWidth" : 40                     // narrowest balloon, in whole columns, 2-500
 }
 ```
 

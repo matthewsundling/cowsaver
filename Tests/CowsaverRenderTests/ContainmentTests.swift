@@ -116,4 +116,12 @@ struct ContainmentTests {
         #expect(CGRect(origin: .zero, size: size).contains(view.presentedTextFrame),
                 "\(view.presentedTextFrame) escapes \(size)")
     }
+
+    @Test func anExtremeDirectPinnedFontUsesTheSafeBound() {
+        var configuration = Configuration()
+        configuration.fontSize = Double.greatestFiniteMagnitude
+
+        let view = present(block(), in: CGSize(width: 200, height: 120), configuration: configuration)
+        #expect(view.presentedMetrics.fontSize == 144)
+    }
 }

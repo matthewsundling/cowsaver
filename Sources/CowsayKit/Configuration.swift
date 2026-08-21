@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 /// A colour, kept here rather than in the AppKit layer.
@@ -113,18 +114,44 @@ public struct Configuration: Equatable, Sendable {
         "debugFrame",
     ]
 
+    /// Shared operating bounds for file decoding and defensive use of configurations built
+    /// directly in code. The settings window can use the same limits when it validates input.
+    public static let rotationSecondsRange = 1 ... 600
+    public static let wrapWidthRange = 2 ... 500
+    public static let pinnedFontSizeRange = 6.0 ... 144.0
+    public static let sizeVariationRange = 0.0 ... 0.9
+    public static let maxFortuneLinesRange = 0 ... 100
+
     // MARK: Derived values, all clamped
 
-    /// Clamped so a hand-edited config cannot produce a busy loop. One second is already
-    /// far more often than anything here needs to happen.
-    public var rotationInterval: Double { min(max(rotationSeconds, 1), 86_400) }
+    /// A direct configuration can bypass file decoding, so this is always a finite safe
+    /// interval for the timer even when the stored value is non-finite.
+    public var rotationInterval: Double {
+        guard rotationSeconds.isFinite else { return Configuration().rotationSeconds }
+        return min(max(rotationSeconds, Double(Self.rotationSecondsRange.lowerBound)),
+                   Double(Self.rotationSecondsRange.upperBound))
+    }
 
-    /// `Text::Wrap` requires at least 2; absurdly wide wrapping just wastes the screen.
-    public var effectiveWrapWidth: Int { min(max(wrapWidth, 2), 500) }
+    /// `Text::Wrap` requires at least two columns, and 500 is the widest useful balloon.
+    public var effectiveWrapWidth: Int {
+        min(max(wrapWidth, Self.wrapWidthRange.lowerBound), Self.wrapWidthRange.upperBound)
+    }
 
-    /// Clamped so a rotation cannot shrink to nothing. At `0.9` the smallest draw is a tenth
-    /// of the fitted size, which is already past reading.
-    public var effectiveSizeVariation: Double { min(max(sizeVariation, 0), 0.9) }
+    /// Non-finite variation would poison layout arithmetic, so it behaves like the default.
+    public var effectiveSizeVariation: Double {
+        guard sizeVariation.isFinite else { return Configuration().sizeVariation }
+        return min(max(sizeVariation, Self.sizeVariationRange.lowerBound),
+                   Self.sizeVariationRange.upperBound)
+    }
+
+    /// The safe pinned point size. Zero retains auto-fit; all other usable values are in the
+    /// documented pinned range before AppKit receives them.
+    public var effectivePinnedFontSize: Double {
+        guard fontSize.isFinite else { return 0 }
+        guard fontSize > 0 else { return 0 }
+        return min(max(fontSize, Self.pinnedFontSizeRange.lowerBound),
+                   Self.pinnedFontSizeRange.upperBound)
+    }
 
     public var balloonMode: BalloonMode {
         balloonStyle.lowercased() == "think" ? .think : .say
@@ -191,7 +218,8 @@ public struct Configuration: Equatable, Sendable {
     }
 
     public var fortuneLoadOptions: FortuneLoadOptions {
-        FortuneLoadOptions(maxLines: max(maxFortuneLines, 0),
+        FortuneLoadOptions(maxLines: min(max(maxFortuneLines, Self.maxFortuneLinesRange.lowerBound),
+                                         Self.maxFortuneLinesRange.upperBound),
                            wrapColumns: effectiveWrapWidth)
     }
 }
@@ -240,12 +268,71 @@ public extension Configuration {
         var configuration = Configuration()
         var warnings: [String] = []
 
-        // Decode fields independently so one invalid value does not discard the rest.
-        func number(_ key: String) -> Double? {
-            if let value = object[key] as? Double { return value }
-            if let value = object[key] as? Int { return Double(value) }
-            if object[key] != nil { warnings.append("\(key): expected a number, ignoring") }
-            return nil
+        func format(_ value: Double) -> String {
+            String(format: "%g", value)
+        }
+
+        // JSON booleans are NSNumbers too, so their Core Foundation type distinguishes them
+        // from JSON numbers before any conversion or bound check happens.
+        func numericValue(_ key: String) -> Double? {
+            guard let raw = object[key] else { return nil }
+            guard let value = raw as? NSNumber,
+                  CFGetTypeID(value) != CFBooleanGetTypeID() else {
+                warnings.append("\(key): expected a number; using default")
+                return nil
+            }
+            let decoded = value.doubleValue
+            guard decoded.isFinite else {
+                warnings.append("\(key): expected a finite number; using default")
+                return nil
+            }
+            return decoded
+        }
+        func wholeNumber(_ key: String, in range: ClosedRange<Int>) -> Int? {
+            guard let decoded = numericValue(key) else { return nil }
+            guard decoded.rounded(.towardZero) == decoded else {
+                warnings.append("\(key): expected a whole number; using default")
+                return nil
+            }
+            // Compare while this is still a Double. Even a huge finite JSON value then clamps
+            // before conversion to Int, so it cannot trap.
+            if decoded < Double(range.lowerBound) {
+                warnings.append("\(key): clamped to \(range.lowerBound)")
+                return range.lowerBound
+            }
+            if decoded > Double(range.upperBound) {
+                warnings.append("\(key): clamped to \(range.upperBound)")
+                return range.upperBound
+            }
+            return Int(decoded)
+        }
+        func boundedNumber(_ key: String, in range: ClosedRange<Double>) -> Double? {
+            guard let decoded = numericValue(key) else { return nil }
+            if decoded < range.lowerBound {
+                warnings.append("\(key): clamped to \(format(range.lowerBound))")
+                return range.lowerBound
+            }
+            if decoded > range.upperBound {
+                warnings.append("\(key): clamped to \(format(range.upperBound))")
+                return range.upperBound
+            }
+            return decoded
+        }
+        func fontSize(_ key: String) -> Double? {
+            guard let decoded = numericValue(key) else { return nil }
+            if decoded < 0 {
+                warnings.append("\(key): clamped to 0")
+                return 0
+            }
+            if decoded > 0 && decoded < Self.pinnedFontSizeRange.lowerBound {
+                warnings.append("\(key): clamped to \(format(Self.pinnedFontSizeRange.lowerBound))")
+                return Self.pinnedFontSizeRange.lowerBound
+            }
+            if decoded > Self.pinnedFontSizeRange.upperBound {
+                warnings.append("\(key): clamped to \(format(Self.pinnedFontSizeRange.upperBound))")
+                return Self.pinnedFontSizeRange.upperBound
+            }
+            return decoded
         }
         func string(_ key: String) -> String? {
             if let value = object[key] as? String { return value }
@@ -253,28 +340,38 @@ public extension Configuration {
             return nil
         }
         func boolean(_ key: String) -> Bool? {
-            if let value = object[key] as? Bool { return value }
-            if object[key] != nil { warnings.append("\(key): expected true or false, ignoring") }
-            return nil
+            guard let raw = object[key] else { return nil }
+            guard let value = raw as? NSNumber,
+                  CFGetTypeID(value) == CFBooleanGetTypeID() else {
+                warnings.append("\(key): expected true or false; using default")
+                return nil
+            }
+            return value.boolValue
         }
 
-        if let value = number("rotationSeconds") { configuration.rotationSeconds = value }
-        if let value = number("wrapWidth") { configuration.wrapWidth = Int(value) }
+        if let value = wholeNumber("rotationSeconds", in: Self.rotationSecondsRange) {
+            configuration.rotationSeconds = Double(value)
+        }
+        if let value = wholeNumber("wrapWidth", in: Self.wrapWidthRange) { configuration.wrapWidth = value }
         if let value = object["cowfiles"] as? [String] { configuration.cowfiles = value }
         else if object["cowfiles"] != nil { warnings.append("cowfiles: expected a list of names, ignoring") }
         if let value = boolean("randomCow") { configuration.randomCow = value }
         if let value = string("face") { configuration.face = value }
         if let value = string("balloonStyle") { configuration.balloonStyle = value }
         if let value = string("fontName") { configuration.fontName = value }
-        if let value = number("fontSize") { configuration.fontSize = value }
-        if let value = number("sizeVariation") { configuration.sizeVariation = value }
+        if let value = fontSize("fontSize") { configuration.fontSize = value }
+        if let value = boundedNumber("sizeVariation", in: Self.sizeVariationRange) {
+            configuration.sizeVariation = value
+        }
         if let value = string("foreground") { configuration.foreground = value }
         if let value = string("background") { configuration.background = value }
         if let value = string("theme") { configuration.theme = value }
         if let value = string("transition") { configuration.transition = value }
         if let value = boolean("reposition") { configuration.reposition = value }
         if let value = boolean("adaptiveWrap") { configuration.adaptiveWrap = value }
-        if let value = number("maxFortuneLines") { configuration.maxFortuneLines = Int(value) }
+        if let value = wholeNumber("maxFortuneLines", in: Self.maxFortuneLinesRange) {
+            configuration.maxFortuneLines = value
+        }
         if let value = boolean("weightByFile") { configuration.weightByFile = value }
         if let value = boolean("debugFrame") { configuration.debugFrame = value }
 
