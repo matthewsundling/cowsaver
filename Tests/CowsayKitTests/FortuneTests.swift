@@ -310,10 +310,17 @@ struct SelectionTests {
     /// A corpus smaller than the history window must still make progress rather than
     /// deadlocking looking for an unseen element.
     @Test(arguments: [1, 2, 3, 5])
-    func smallCorporaStillTerminate(size: Int) {
+    func smallCorporaRespectTheClampedHistoryAndStillTerminate(size: Int) {
         var selector = NoRepeatSelector(elements: Array(fortunes.prefix(size)),
                                         historyLimit: 20, seed: 3)
-        for _ in 0 ..< 100 { #expect(selector.next() != nil) }
+        let expectedHistorySize = max(0, size - 1)
+        var recent: [String] = []
+        for _ in 0 ..< 20 {
+            guard let next = selector.next()?.text else { return #expect(Bool(false)) }
+            #expect(!recent.contains(next))
+            recent.append(next)
+            while recent.count > expectedHistorySize { recent.removeFirst() }
+        }
     }
 
     @Test func emptyCorpusYieldsNil() {
@@ -321,14 +328,142 @@ struct SelectionTests {
         #expect(selector.next() == nil)
     }
 
-    @Test func weightingByFileFavoursLargerFiles() {
+    @Test func uniformRecordModeIgnoresSourceSizesAndByteCounts() {
         let database = FortuneDatabase(
-            fortunes: [Fortune(text: "small", source: "a"), Fortune(text: "big", source: "b")],
-            weights: ["a": 1, "b": 999]
+            fortunes: [
+                Fortune(text: "a0", source: "a"),
+                Fortune(text: "a1", source: "a"),
+                Fortune(text: "a2", source: "a"),
+                Fortune(text: "b0", source: "b"),
+            ],
+            weights: ["a": Int.max, "b": 1]
+        )
+        let rolls = [0.0, 0.24, 0.25, 0.49, 0.5, 0.74, 0.75, 0.99]
+        var selector = NoRepeatSelector(database: database, historyLimit: 0,
+                                        seed: 11, weightByFile: false,
+                                        controlledRolls: rolls)
+
+        let picks = rolls.compactMap { _ in selector.next()?.text }
+        #expect(picks == ["a0", "a0", "a1", "a1", "a2", "a2", "b0", "b0"])
+    }
+
+    @Test func equalSourceModeSplitsEachSourcesShareAmongItsRecords() {
+        let fortunes = [
+            Fortune(text: "a0", source: "a"),
+            Fortune(text: "a1", source: "a"),
+            Fortune(text: "b0", source: "b"),
+        ]
+        let rolls = [0.0, 0.0, 0.49, 0.75, 0.5, 0.99]
+        let expected = ["a0", "a1", "b0", "b0"]
+        let byteCounts: [[String: Int]] = [
+            ["a": 1, "b": Int.max],
+            ["a": Int.max, "b": 1],
+        ]
+
+        for weights in byteCounts {
+            let database = FortuneDatabase(fortunes: fortunes, weights: weights)
+            var selector = NoRepeatSelector(database: database, historyLimit: 0,
+                                            seed: 1, weightByFile: true,
+                                            controlledRolls: rolls)
+            let picks = (0 ..< expected.count).compactMap { _ in selector.next()?.text }
+            #expect(picks == expected)
+        }
+    }
+
+    @Test func equalSourceModeExcludesAndReadmitsAWhollyRecentSource() {
+        let database = FortuneDatabase(fortunes: [
+            Fortune(text: "a0", source: "a"),
+            Fortune(text: "a1", source: "a"),
+            Fortune(text: "b0", source: "b"),
+        ])
+        var selector = NoRepeatSelector(database: database, historyLimit: 2,
+                                        seed: 1, weightByFile: true,
+                                        controlledRolls: [0.0, 0.0, 0.0])
+
+        let picks = (0 ..< 4).compactMap { _ in selector.next()?.text }
+        #expect(picks == ["a0", "a1", "b0", "a0"])
+    }
+
+    @Test func weightedHistoryRenormalizesEqualAlternativesWithoutArrayBias() {
+        let elements = ["dominant", "first", "second"]
+        var lowerRoll = NoRepeatSelector(elements: elements, historyLimit: 1, seed: 1,
+                                         weights: [Int.max, 1, 1],
+                                         controlledRolls: [0.0, 0.25])
+        var upperRoll = NoRepeatSelector(elements: elements, historyLimit: 1, seed: 1,
+                                         weights: [Int.max, 1, 1],
+                                         controlledRolls: [0.0, 0.75])
+
+        #expect(lowerRoll.next() == "dominant")
+        #expect(lowerRoll.next() == "first")
+        #expect(upperRoll.next() == "dominant")
+        #expect(upperRoll.next() == "second")
+    }
+
+    @Test func weightedModeUsesOnlyEligiblePositiveWeights() {
+        let elements = ["two", "three", "zero", "negative"]
+        let rolls = [0.0, 0.39, 0.41, 0.99]
+        var selector = NoRepeatSelector(elements: elements, historyLimit: 0, seed: 1,
+                                        weights: [2, 3, 0, -1],
+                                        controlledRolls: rolls)
+
+        let picks = rolls.compactMap { _ in selector.next() }
+        #expect(picks == ["two", "two", "three", "three"])
+    }
+
+    @Test func weightedModeRecoversUniformlyWhenAllPositiveWeightsAreRecent() {
+        let elements = ["positive", "zero", "negative"]
+        var lowerRoll = NoRepeatSelector(elements: elements, historyLimit: 1, seed: 1,
+                                         weights: [1, 0, -1],
+                                         controlledRolls: [0.0, 0.0])
+        var upperRoll = NoRepeatSelector(elements: elements, historyLimit: 1, seed: 1,
+                                         weights: [1, 0, -1],
+                                         controlledRolls: [0.0, 0.75])
+
+        #expect(lowerRoll.next() == "positive")
+        #expect(lowerRoll.next() == "zero")
+        #expect(upperRoll.next() == "positive")
+        #expect(upperRoll.next() == "negative")
+    }
+
+    @Test func invalidWeightArraysRecoverToUniformSelection() {
+        let elements = ["first", "second", "third"]
+        var absent = NoRepeatSelector(elements: elements, historyLimit: 0, seed: 1,
+                                      controlledRolls: [0.1])
+        var mismatched = NoRepeatSelector(elements: elements, historyLimit: 0, seed: 1,
+                                          weights: [Int.max], controlledRolls: [0.8])
+        var nonPositive = NoRepeatSelector(elements: elements, historyLimit: 0, seed: 1,
+                                           weights: [0, -1, Int.min],
+                                           controlledRolls: [0.4])
+
+        #expect(absent.next() == "first")
+        #expect(mismatched.next() == "third")
+        #expect(nonPositive.next() == "second")
+    }
+
+    @Test func duplicateTextInDistinctRecordsRemainsDistinct() {
+        let database = FortuneDatabase(
+            fortunes: [
+                Fortune(text: "same", source: "a"),
+                Fortune(text: "same", source: "b"),
+            ],
+            weights: ["a": Int.max, "b": 1]
         )
         var selector = NoRepeatSelector(database: database, historyLimit: 0,
-                                        seed: 11, weightByFile: true)
-        let picks = (0 ..< 200).compactMap { _ in selector.next()?.text }
-        #expect(picks.filter { $0 == "big" }.count > picks.filter { $0 == "small" }.count)
+                                        seed: 1, weightByFile: false,
+                                        controlledRolls: [0.0, 0.5])
+
+        let picks = (0 ..< 2).compactMap { _ in selector.next() }
+        #expect(picks.map(\.text) == ["same", "same"])
+        #expect(picks.map(\.source) == ["a", "b"])
+    }
+
+    @Test func extremeIntegerWeightsDoNotOverflow() {
+        var selector = NoRepeatSelector(elements: ["first", "second", "excluded"],
+                                        historyLimit: 0, seed: 1,
+                                        weights: [Int.max, Int.max, Int.min],
+                                        controlledRolls: [0.25, 0.75])
+
+        #expect(selector.next() == "first")
+        #expect(selector.next() == "second")
     }
 }

@@ -71,7 +71,7 @@ public struct FortuneDatabase: Sendable {
 
     public private(set) var fortunes: [Fortune]
     public private(set) var statistics: Statistics
-    /// Bytes per source file, for `weightByFile` selection.
+    /// Raw byte count per source file, retained as loading metadata.
     public private(set) var weights: [String: Int]
 
     public var isEmpty: Bool { fortunes.isEmpty }

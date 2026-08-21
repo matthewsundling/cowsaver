@@ -11,6 +11,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- Fortune selection now gives files equal probability when `weightByFile` is enabled and applies
+  no-repeat history without biasing the remaining eligible records.
 - Stale timer operations and queued rotations no longer outlive the registration lifecycle that
   created them.
 - A checkout-launched packaged app no longer loads bundled resources twice, and same-named
