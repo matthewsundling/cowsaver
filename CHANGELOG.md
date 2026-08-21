@@ -11,6 +11,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- A checkout-launched packaged app no longer loads bundled resources twice, and same-named
+  personal and bundled fortune files retain distinct source weights.
 - Configuration decoding now enforces bounded numeric and strict Boolean settings plus normalized
   categorical values and resilient lists: malformed entries warn and recover independently,
   finite out-of-range numbers clamp, and cowfile selection reports unavailable names and its

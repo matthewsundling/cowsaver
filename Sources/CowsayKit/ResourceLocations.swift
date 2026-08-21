@@ -58,27 +58,66 @@ public enum ResourceLocations {
 
     /// Cowfile resources bundled with Cowsaver.
     public static func cowDirectories(bundle: Bundle?) -> [URL] {
-        var directories: [URL] = []
-        if let resources = bundle?.resourceURL {
-            directories.append(resources.appendingPathComponent("cows"))
-        }
-        directories += developmentFallbacks(subdirectory: "cows")
-        return directories
+        cowDirectories(bundleResourceURL: bundle?.resourceURL,
+                       developmentResourceURL: developmentResourcesURL())
     }
 
     /// Fortune directories: a user's collection first, then the bundled curated set. The
     /// preserved upstream import is not a runtime search path.
     public static func fortuneDirectories(bundle: Bundle?) -> [URL] {
-        var directories = supportDirectories().map { $0.appendingPathComponent("fortune-user") }
-        if let resources = bundle?.resourceURL {
-            directories.append(resources.appendingPathComponent("fortune-curated"))
+        fortuneDirectories(supportDirectories: supportDirectories(),
+                           bundleResourceURL: bundle?.resourceURL,
+                           developmentResourceURL: developmentResourcesURL())
+    }
+
+    /// Internal seams keep discovery testable without changing the front ends' bundle API.
+    static func cowDirectories(bundleResourceURL: URL?, developmentResourceURL: URL) -> [URL] {
+        bundledOrDevelopmentDirectories(subdirectory: "cows", bundleResourceURL: bundleResourceURL,
+                                        developmentResourceURL: developmentResourceURL)
+    }
+
+    static func fortuneDirectories(supportDirectories: [URL], bundleResourceURL: URL?,
+                                   developmentResourceURL: URL) -> [URL] {
+        standardizedDirectories(
+            supportDirectories.map { $0.appendingPathComponent("fortune-user") }
+                + bundledOrDevelopmentDirectories(
+                    subdirectory: "fortune-curated", bundleResourceURL: bundleResourceURL,
+                    developmentResourceURL: developmentResourceURL
+                )
+        )
+    }
+
+    /// A bundle is authoritative only when the requested collection is actually present.
+    /// This retains checkout loading for source-tree runs without loading the same collection
+    /// again beside a packaged copy.
+    private static func bundledOrDevelopmentDirectories(
+        subdirectory: String,
+        bundleResourceURL: URL?,
+        developmentResourceURL: URL
+    ) -> [URL] {
+        if let bundleResourceURL {
+            let bundled = bundleResourceURL.appendingPathComponent(subdirectory)
+            if isDirectory(bundled) { return standardizedDirectories([bundled]) }
         }
-        directories += developmentFallbacks(subdirectory: "fortune-curated")
-        return directories
+        return standardizedDirectories([developmentResourceURL.appendingPathComponent(subdirectory)])
     }
 
     /// Lets the standalone app run from a checkout when no bundle resources are available.
-    private static func developmentFallbacks(subdirectory: String) -> [URL] {
-        [URL(fileURLWithPath: "Resources").appendingPathComponent(subdirectory)]
+    private static func developmentResourcesURL() -> URL {
+        URL(fileURLWithPath: "Resources")
+    }
+
+    /// Preserve search precedence while treating equivalent spellings of one root as one input.
+    static func standardizedDirectories(_ directories: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return directories.map(\.standardizedFileURL).filter {
+            seen.insert($0.path).inserted
+        }
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 }
