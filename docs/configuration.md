@@ -124,10 +124,11 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   Raising it admits longer fortunes, which auto-fit then draws at a smaller size. `0` keeps
   everything.
 - **`weightByFile`** changes how a fortune is chosen. By default every record is equally
-  likely, whichever file it came from. Set it to `true` and each record's chance becomes
-  proportional to the byte size of the file it came from, so records in large files come up
-  more often — fortune's size-proportional weighting rather than a uniform draw. Either way
-  a short history prevents immediate repeats.
+  likely, whichever file it came from. Set it to `true` and Cowsaver first gives every source
+  file that has an eligible record the same chance, then chooses equally among that source's
+  eligible records. A small personal file therefore has the same source-level chance as a large
+  bundled file. Either way a short history prevents immediate repeats, and a source whose every
+  record is in that history waits until one of its records becomes eligible again.
 
 ### Layout
 
@@ -305,7 +306,7 @@ with comments added:
   "sizeVariation" : 0,                 // above 0, varies the fitted size per rotation
   "theme" : "green-phosphor",          // remove this key to use the two colours above
   "transition" : "fade",               // "none" disables the crossfade
-  "weightByFile" : false,              // true favours records from larger fortune files
+  "weightByFile" : false,              // true gives each eligible source file an equal chance
   "wrapWidth" : 40                     // narrowest balloon, in whole columns, 2-500
 }
 ```
