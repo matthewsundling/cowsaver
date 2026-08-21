@@ -32,7 +32,7 @@ public struct CowfileLibrary: Sendable {
         var failures: [Failure] = []
         let fm = FileManager.default
 
-        for directory in directories {
+        for directory in ResourceLocations.standardizedDirectories(directories) {
             var isDirectory: ObjCBool = false
             guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory),
                   isDirectory.boolValue else { continue }

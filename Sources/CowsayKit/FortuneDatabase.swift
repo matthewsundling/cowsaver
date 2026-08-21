@@ -2,7 +2,7 @@ import Foundation
 
 public struct Fortune: Equatable, Sendable {
     public let text: String
-    /// The file the record came from, used for `weightByFile` selection and diagnostics.
+    /// The root-qualified file identity, used for `weightByFile` selection and diagnostics.
     public let source: String
 
     public init(text: String, source: String) {
@@ -209,7 +209,7 @@ public struct FortuneDatabase: Sendable {
         var weights: [String: Int] = [:]
         let fm = FileManager.default
 
-        for directory in directories {
+        for directory in ResourceLocations.standardizedDirectories(directories) {
             var isDirectory: ObjCBool = false
             guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory),
                   isDirectory.boolValue,
@@ -242,12 +242,15 @@ public struct FortuneDatabase: Sendable {
                     continue
                 }
 
-                let parsed = parse(contents: contents, source: relative, options: options,
+                // A relative filename is ambiguous across intended collections. Keep the
+                // standardized root in the identity so each file owns its own weight.
+                let source = path.standardizedFileURL.path
+                let parsed = parse(contents: contents, source: source, options: options,
                                    excluded: excluded,
                                    statistics: &statistics)
                 guard !parsed.isEmpty else { continue }
                 statistics.filesRead += 1
-                weights[relative] = data.count
+                weights[source] = data.count
                 fortunes += parsed
             }
         }
