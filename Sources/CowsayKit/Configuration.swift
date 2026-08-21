@@ -17,7 +17,7 @@ public struct ThemeColor: Equatable, Sendable {
     /// throwing: a bad colour in a config file must degrade to the default, not take the
     /// screensaver down.
     public init?(hex: String) {
-        var text = hex.trimmingCharacters(in: .whitespaces)
+        var text = hex
         if text.hasPrefix("#") { text.removeFirst() }
 
         let digits = Array(text.lowercased())
@@ -158,18 +158,7 @@ public struct Configuration: Equatable, Sendable {
     }
 
     public var faceModes: Set<FaceMode> {
-        // Accepts "dead", "d", or "dead,young".
-        let tokens = face.lowercased().split(whereSeparator: { $0 == "," || $0 == " " })
-        var modes: Set<FaceMode> = []
-        for token in tokens {
-            if let mode = FaceMode(rawValue: String(token)) {
-                modes.insert(mode)
-            } else if token.count == 1, let first = token.first,
-                      let mode = FaceMode.fromFlag(first) {
-                modes.insert(mode)
-            }
-        }
-        return modes
+        parseFace(face).modes
     }
 
     /// A named theme wins over raw hex values, so `"theme": "amber"` does what it looks
@@ -224,6 +213,47 @@ public struct Configuration: Equatable, Sendable {
     }
 }
 
+private struct ParsedFace {
+    let normalized: String
+    let modes: Set<FaceMode>
+    let rejectedTokens: [String]
+    let recognizedAnyToken: Bool
+}
+
+/// Keep file normalization and the defensive behavior for directly constructed
+/// configurations on one token grammar.
+private func parseFace(_ value: String) -> ParsedFace {
+    let tokens = value.split(whereSeparator: { $0 == "," || $0.isWhitespace })
+    var normalizedModes: [String] = []
+    var modes: Set<FaceMode> = []
+    var rejectedTokens: [String] = []
+    var recognizedDefault = false
+
+    for rawToken in tokens {
+        let token = rawToken.lowercased()
+        if token == "default" {
+            recognizedDefault = true
+        } else if let mode = FaceMode(rawValue: token) {
+            normalizedModes.append(token)
+            modes.insert(mode)
+        } else if token.count == 1, let flag = token.first,
+                  let mode = FaceMode.fromFlag(flag) {
+            normalizedModes.append(token)
+            modes.insert(mode)
+        } else {
+            rejectedTokens.append(String(rawToken))
+        }
+    }
+
+    let recognizedAnyToken = recognizedDefault || !normalizedModes.isEmpty
+    return ParsedFace(
+        normalized: normalizedModes.isEmpty ? "default" : normalizedModes.joined(separator: ", "),
+        modes: modes,
+        rejectedTokens: rejectedTokens,
+        recognizedAnyToken: recognizedAnyToken
+    )
+}
+
 // MARK: - Loading
 
 public extension Configuration {
@@ -266,6 +296,7 @@ public extension Configuration {
     /// passing unnoticed.
     static func load(object: [String: Any]) -> LoadResult {
         var configuration = Configuration()
+        let defaults = configuration
         var warnings: [String] = []
 
         func format(_ value: Double) -> String {
@@ -334,11 +365,6 @@ public extension Configuration {
             }
             return decoded
         }
-        func string(_ key: String) -> String? {
-            if let value = object[key] as? String { return value }
-            if object[key] != nil { warnings.append("\(key): expected a string, ignoring") }
-            return nil
-        }
         func boolean(_ key: String) -> Bool? {
             guard let raw = object[key] else { return nil }
             guard let value = raw as? NSNumber,
@@ -348,25 +374,117 @@ public extension Configuration {
             }
             return value.boolValue
         }
+        func categorical(_ key: String, allowed: [String], default defaultValue: String) -> String? {
+            guard let raw = object[key] else { return nil }
+            guard let value = raw as? String else {
+                warnings.append("\(key): expected a string; using \(defaultValue)")
+                return defaultValue
+            }
+            guard let canonical = allowed.first(where: {
+                $0.caseInsensitiveCompare(value) == .orderedSame
+            }) else {
+                warnings.append("\(key): unsupported value '\(value)'; using \(defaultValue)")
+                return defaultValue
+            }
+            return canonical
+        }
+        func face() -> String? {
+            guard let raw = object["face"] else { return nil }
+            guard let value = raw as? String else {
+                warnings.append("face: expected a string; using default")
+                return defaults.face
+            }
+            let parsed = parseFace(value)
+            for token in parsed.rejectedTokens {
+                warnings.append("face: rejected token '\(token)'")
+            }
+            if !parsed.recognizedAnyToken {
+                warnings.append("face: no recognized tokens remain; using default")
+            }
+            return parsed.normalized
+        }
+        func fontName() -> String? {
+            guard let raw = object["fontName"] else { return nil }
+            guard let value = raw as? String else {
+                warnings.append("fontName: expected a non-empty string; using \(defaults.fontName)")
+                return defaults.fontName
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                warnings.append("fontName: expected a non-empty string; using \(defaults.fontName)")
+                return defaults.fontName
+            }
+            return trimmed
+        }
+        func color(_ key: String, default defaultValue: String) -> String? {
+            guard let raw = object[key] else { return nil }
+            guard let value = raw as? String else {
+                warnings.append("\(key): expected a hexadecimal colour string; using \(defaultValue)")
+                return defaultValue
+            }
+            guard ThemeColor(hex: value) != nil else {
+                warnings.append("\(key): invalid hexadecimal colour '\(value)'; using \(defaultValue)")
+                return defaultValue
+            }
+            return value
+        }
+        func cowfiles() -> [String]? {
+            guard let raw = object["cowfiles"] else { return nil }
+            guard let entries = raw as? [Any] else {
+                warnings.append(
+                    "cowfiles: expected an array; using default \(defaults.cowfiles)"
+                )
+                return defaults.cowfiles
+            }
+
+            var names: [String] = []
+            var seen: Set<String> = []
+            for (index, entry) in entries.enumerated() {
+                guard let name = entry as? String else {
+                    warnings.append("cowfiles[\(index)]: expected a string; entry ignored")
+                    continue
+                }
+                guard seen.insert(name).inserted else {
+                    warnings.append(
+                        "cowfiles[\(index)]: duplicate name '\(name)'; entry ignored"
+                    )
+                    continue
+                }
+                names.append(name)
+            }
+            return names
+        }
 
         if let value = wholeNumber("rotationSeconds", in: Self.rotationSecondsRange) {
             configuration.rotationSeconds = Double(value)
         }
         if let value = wholeNumber("wrapWidth", in: Self.wrapWidthRange) { configuration.wrapWidth = value }
-        if let value = object["cowfiles"] as? [String] { configuration.cowfiles = value }
-        else if object["cowfiles"] != nil { warnings.append("cowfiles: expected a list of names, ignoring") }
+        if let value = cowfiles() { configuration.cowfiles = value }
         if let value = boolean("randomCow") { configuration.randomCow = value }
-        if let value = string("face") { configuration.face = value }
-        if let value = string("balloonStyle") { configuration.balloonStyle = value }
-        if let value = string("fontName") { configuration.fontName = value }
+        if let value = face() { configuration.face = value }
+        if let value = categorical("balloonStyle", allowed: ["say", "think"],
+                                   default: defaults.balloonStyle) {
+            configuration.balloonStyle = value
+        }
+        if let value = fontName() { configuration.fontName = value }
         if let value = fontSize("fontSize") { configuration.fontSize = value }
         if let value = boundedNumber("sizeVariation", in: Self.sizeVariationRange) {
             configuration.sizeVariation = value
         }
-        if let value = string("foreground") { configuration.foreground = value }
-        if let value = string("background") { configuration.background = value }
-        if let value = string("theme") { configuration.theme = value }
-        if let value = string("transition") { configuration.transition = value }
+        if let value = color("foreground", default: defaults.foreground) {
+            configuration.foreground = value
+        }
+        if let value = color("background", default: defaults.background) {
+            configuration.background = value
+        }
+        if let value = categorical("theme", allowed: ThemePreset.all.map(\.name),
+                                   default: defaults.theme!) {
+            configuration.theme = value
+        }
+        if let value = categorical("transition", allowed: ["fade", "none"],
+                                   default: defaults.transition) {
+            configuration.transition = value
+        }
         if let value = boolean("reposition") { configuration.reposition = value }
         if let value = boolean("adaptiveWrap") { configuration.adaptiveWrap = value }
         if let value = wholeNumber("maxFortuneLines", in: Self.maxFortuneLinesRange) {
@@ -380,17 +498,6 @@ public extension Configuration {
         if object["theme"] == nil,
            object["foreground"] != nil || object["background"] != nil {
             configuration.theme = nil
-        }
-
-        if let name = configuration.theme, ThemePreset.named(name) == nil {
-            warnings.append("theme: unknown preset '\(name)'; using the colours as given")
-            configuration.theme = nil
-        }
-        if ThemeColor(hex: configuration.foreground) == nil {
-            warnings.append("foreground: '\(configuration.foreground)' is not a hex colour")
-        }
-        if ThemeColor(hex: configuration.background) == nil {
-            warnings.append("background: '\(configuration.background)' is not a hex colour")
         }
 
         // Without this a misspelled key looks exactly like a setting that had no effect.
