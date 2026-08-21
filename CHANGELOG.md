@@ -11,6 +11,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- Stale timer operations and queued rotations no longer outlive the registration lifecycle that
+  created them.
 - A checkout-launched packaged app no longer loads bundled resources twice, and same-named
   personal and bundled fortune files retain distinct source weights.
 - Configuration decoding now enforces bounded numeric and strict Boolean settings plus normalized

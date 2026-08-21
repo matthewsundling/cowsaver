@@ -131,8 +131,8 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         }
     }
 
-    /// `RotationClient`. The coordinator prunes a detached view at its next rotation tick.
-    public var isLive: Bool { window != nil }
+    /// `RotationClient`. An attached but stopped view is no longer eligible for rotation.
+    public var isLive: Bool { isRegistered && isAnimating && window != nil }
 
     public func rotate() {
         guard let content, let engine else { return }

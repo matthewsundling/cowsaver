@@ -2,8 +2,8 @@ import Foundation
 
 /// Something that wants to be told when to change what it shows.
 public protocol RotationClient: AnyObject {
-    /// Whether this client should receive future rotations. A view is live while it belongs
-    /// to a window; the coordinator removes clients that are no longer live.
+    /// Whether this registered client is still lifecycle-eligible for rotation.
+    /// Production coordinators evaluate this on the main thread.
     var isLive: Bool { get }
     /// Called on the main thread.
     func rotate()
@@ -14,56 +14,96 @@ public protocol RotationClient: AnyObject {
 /// A host may retain views beyond their displayed lifetime or create several views at once.
 /// A timer owned by each view can therefore outlive its useful work.
 ///
-/// So the relationship is inverted. The coordinator owns exactly one `DispatchSourceTimer`
-/// and holds only **weak** references to its clients. Every tick:
+/// Membership, effective interval, and the current timer generation are one locked state.
+/// Removing the last member detaches that timer while holding the lock; cancellation after the
+/// unlock still targets only the detached source, so it cannot stop a later generation. Timer
+/// events and queued deliveries carry the generation that created them, while each registration
+/// lifetime has its own token. Both identities must still be current before delivery begins.
 ///
-///   1. drops clients that are `nil` *or* no longer `isLive` — the leaked-instance case,
-///   2. cancels the timer outright if none remain,
-///   3. otherwise delivers `rotate()` to the survivors.
-///
-/// Active views share one timer; detached views are pruned on the next tick. Explicit
-/// teardown stops the timer immediately when the last client leaves.
+/// The coordinator holds clients weakly. A timer tick captures the current weak memberships and
+/// sends lifecycle evaluation and rotation to the main thread. Ineligible or deallocated clients
+/// are then pruned, stopping or rescheduling the timer as one state transition. No client callback
+/// runs while the coordinator lock is held.
 ///
 /// Each client keeps the interval it asked for, and the timer runs at the shortest one any
-/// live client wants. The host process outlives individual views, so that figure is derived
-/// from the current membership rather than accumulated across it.
+/// registered client wants. Changing that effective interval replaces the timer generation, so
+/// the next rotation is scheduled for roughly one full new interval from the change.
 public final class RotationCoordinator {
     public static let shared = RotationCoordinator()
 
-    private final class WeakClient {
-        weak var value: RotationClient?
+    private final class Membership {
+        weak var client: RotationClient?
         var interval: TimeInterval
-        init(_ value: RotationClient, interval: TimeInterval) {
-            self.value = value
+        let token: UInt64
+
+        init(_ client: RotationClient, interval: TimeInterval, token: UInt64) {
+            self.client = client
             self.interval = interval
+            self.token = token
         }
     }
 
-    /// Used while no live client asks for anything shorter.
+    private struct TimerState {
+        let source: DispatchSourceTimer
+        let generation: UInt64
+    }
+
+    typealias DeliveryScheduler = (@escaping () -> Void) -> Void
+    typealias TimerCancellation = (DispatchSourceTimer) -> Void
+
+    /// Used while no registered client asks for anything shorter.
     private static let defaultInterval: TimeInterval = 45
 
     private let lock = NSLock()
     private let queue = DispatchQueue(label: "com.matthewsundling.cowsaver.rotation",
                                       qos: .utility)
-    private var timer: DispatchSourceTimer?
-    private var clients: [WeakClient] = []
+    private let scheduleDelivery: DeliveryScheduler
+    private let cancelTimer: TimerCancellation
+    private var timer: TimerState?
+    private var memberships: [Membership] = []
     private var interval: TimeInterval = RotationCoordinator.defaultInterval
+    private var nextMembershipToken: UInt64 = 0
+    private var nextTimerGeneration: UInt64 = 0
 
-    /// Whether `rotate()` is delivered on the main queue.
-    ///
-    /// Tests drive `tick()` directly and need the callbacks to land synchronously rather
-    /// than on a main queue that is not running.
-    private let deliversOnMain: Bool
+    /// Production delivery is asynchronous on the main queue. Synchronous delivery is retained
+    /// as a narrow deterministic test seam for clients that do not access AppKit state.
+    public convenience init(deliverOnMain: Bool = true) {
+        if deliverOnMain {
+            self.init(
+                scheduleDelivery: { work in DispatchQueue.main.async(execute: work) },
+                cancelTimer: { source in source.cancel() }
+            )
+        } else {
+            self.init(
+                scheduleDelivery: { work in work() },
+                cancelTimer: { source in source.cancel() }
+            )
+        }
+    }
 
-    public init(deliverOnMain: Bool = true) {
-        self.deliversOnMain = deliverOnMain
+    /// Internal seams let tests capture main delivery and delay physical cancellation without
+    /// replacing the coordinator's state machine or timer implementation.
+    init(
+        scheduleDelivery: @escaping DeliveryScheduler,
+        cancelTimer: @escaping TimerCancellation = { source in source.cancel() }
+    ) {
+        self.scheduleDelivery = scheduleDelivery
+        self.cancelTimer = cancelTimer
+    }
+
+    deinit {
+        lock.lock()
+        let source = timer?.source
+        timer = nil
+        lock.unlock()
+        if let source { cancelTimer(source) }
     }
 
     // MARK: Introspection for tests
 
     public var clientCount: Int {
         lock.lock(); defer { lock.unlock() }
-        return clients.compactMap(\.value).filter(\.isLive).count
+        return memberships.compactMap(\.client).count
     }
 
     public var isRunning: Bool {
@@ -71,126 +111,164 @@ public final class RotationCoordinator {
         return timer != nil
     }
 
-    /// The interval the timer runs at: the shortest one any live client asked for.
+    /// The interval the timer runs at: the shortest one any registered client asked for.
     public var effectiveInterval: TimeInterval {
         lock.lock(); defer { lock.unlock() }
         return interval
+    }
+
+    /// A narrow test seam for attributing a deterministic event to an old timer.
+    var currentTimerGeneration: UInt64? {
+        lock.lock(); defer { lock.unlock() }
+        return timer?.generation
     }
 
     // MARK: Registration
 
     public func register(_ client: RotationClient, interval: TimeInterval) {
         lock.lock()
-        prune()
-        if let existing = clients.first(where: { $0.value === client }) {
+        pruneDeallocatedLocked()
+        if let existing = memberships.first(where: { $0.client === client }) {
             existing.interval = interval
         } else {
-            clients.append(WeakClient(client, interval: interval))
+            nextMembershipToken &+= 1
+            memberships.append(Membership(client, interval: interval,
+                                          token: nextMembershipToken))
         }
-        let changed = recomputeInterval()
-        let shouldStart = timer == nil && !clients.isEmpty
-        let running = changed ? timer : nil
-        let seconds = self.interval
+        let sourceToCancel = reconcileTimerLocked()
         lock.unlock()
 
-        if shouldStart {
-            startTimer()
-        } else if let running {
-            schedule(running, every: seconds)
-        }
+        if let sourceToCancel { cancelTimer(sourceToCancel) }
     }
 
     /// Safe to call repeatedly from each lifecycle path that can detach a view.
     public func unregister(_ client: RotationClient) {
         lock.lock()
-        clients.removeAll { $0.value === client || $0.value == nil }
-        let changed = recomputeInterval()
-        let shouldStop = clients.isEmpty
-        let running = changed ? timer : nil
-        let seconds = self.interval
+        memberships.removeAll { $0.client === client || $0.client == nil }
+        let sourceToCancel = reconcileTimerLocked()
         lock.unlock()
 
-        if shouldStop {
-            stopTimer()
-        } else if let running {
-            schedule(running, every: seconds)
-        }
+        if let sourceToCancel { cancelTimer(sourceToCancel) }
     }
 
     // MARK: Timer
 
-    private func startTimer() {
-        lock.lock()
-        guard timer == nil else { lock.unlock(); return }
-        let seconds = interval
-        let source = DispatchSource.makeTimerSource(queue: queue)
-        schedule(source, every: seconds)
-        source.setEventHandler { [weak self] in self?.tick() }
-        timer = source
-        lock.unlock()
-        source.resume()
-    }
-
-    /// Set the shared timer's cadence, on a new source or a running one.
-    ///
-    /// Generous leeway lets the OS coalesce our wakeups with others already scheduled. At a
-    /// 45-second interval, five seconds of slack does not affect readability.
-    ///
-    /// Scheduling a running source again restarts its phase, so a changed interval also moves
-    /// the next rotation to roughly one full interval from now.
-    private func schedule(_ source: DispatchSourceTimer, every seconds: TimeInterval) {
-        source.schedule(deadline: .now() + seconds,
-                        repeating: seconds,
-                        leeway: .seconds(5))
-    }
-
-    private func stopTimer() {
-        lock.lock()
-        let source = timer
-        timer = nil
-        lock.unlock()
-        source?.cancel()
-    }
-
-    /// Internal so tests can drive a rotation deterministically.
+    /// Internal so tests can drive a current rotation deterministically.
     func tick() {
         lock.lock()
-        prune()
-        let live = clients.compactMap(\.value).filter(\.isLive)
-        let empty = live.isEmpty
-        let changed = recomputeInterval()
-        let running = changed ? timer : nil
-        let seconds = interval
+        let generation = timer?.generation
+        lock.unlock()
+        guard let generation else { return }
+        tick(generation: generation)
+    }
+
+    /// Accept an event only while the timer generation that emitted it is still current.
+    /// Internal so a test can deterministically invoke a canceled timer's late event.
+    func tick(generation: UInt64) {
+        lock.lock()
+        guard timer?.generation == generation else {
+            lock.unlock()
+            return
+        }
+
+        pruneDeallocatedLocked()
+        let sourceToCancel = reconcileTimerLocked()
+        let deliveryGeneration = timer?.generation
+        let captured = memberships
         lock.unlock()
 
-        // Stop the timer when pruning leaves no live clients.
-        guard !empty else { stopTimer(); return }
+        if let sourceToCancel { cancelTimer(sourceToCancel) }
+        guard let deliveryGeneration, !captured.isEmpty else { return }
 
-        // Pruning can lengthen the effective interval; the running timer follows it.
-        if let running { schedule(running, every: seconds) }
-
-        let work = { for client in live where client.isLive { client.rotate() } }
-        if deliversOnMain { DispatchQueue.main.async(execute: work) } else { work() }
-    }
-
-    /// Caller holds the lock.
-    private func prune() {
-        clients.removeAll { $0.value == nil || $0.value?.isLive == false }
-    }
-
-    /// Caller holds the lock. The shortest interval any live client asked for wins; they all
-    /// rotate together. Nothing survives an empty membership, so the interval a later
-    /// registration asks for takes effect on its own terms.
-    ///
-    /// Returns whether the effective interval changed.
-    private func recomputeInterval() -> Bool {
-        let requested = clients.compactMap { client -> TimeInterval? in
-            guard let value = client.value, value.isLive else { return nil }
-            return client.interval
+        scheduleDelivery { [weak self] in
+            self?.deliver(captured, generation: deliveryGeneration)
         }
-        let updated = requested.min() ?? RotationCoordinator.defaultInterval
-        guard updated != interval else { return false }
-        interval = updated
-        return true
+    }
+
+    /// Evaluate real lifecycle state on the delivery queue, then atomically reject stale timer
+    /// generations and membership lifetimes before any rotation callback begins.
+    private func deliver(_ captured: [Membership], generation: UInt64) {
+        lock.lock()
+        let generationIsCurrent = timer?.generation == generation
+        lock.unlock()
+        guard generationIsCurrent else { return }
+
+        let evaluated = captured.map { membership in
+            (membership, membership.client, membership.client?.isLive == true)
+        }
+
+        lock.lock()
+        guard timer?.generation == generation else {
+            lock.unlock()
+            return
+        }
+
+        let rejectedTokens = Set(evaluated.compactMap { membership, _, isLive in
+            isLive ? nil : membership.token
+        })
+        if !rejectedTokens.isEmpty {
+            memberships.removeAll { rejectedTokens.contains($0.token) }
+        }
+        let sourceToCancel = reconcileTimerLocked()
+        let currentGeneration = timer?.generation
+        let eligible = evaluated.compactMap { membership, client, isLive -> (Membership, RotationClient)? in
+            guard isLive, let client,
+                  memberships.contains(where: { $0 === membership && $0.token == membership.token })
+            else { return nil }
+            return (membership, client)
+        }
+        lock.unlock()
+
+        if let sourceToCancel { cancelTimer(sourceToCancel) }
+        guard let currentGeneration else { return }
+
+        for (membership, client) in eligible {
+            lock.lock()
+            let mayBegin = timer?.generation == currentGeneration
+                && memberships.contains(where: {
+                    $0 === membership && $0.token == membership.token && $0.client === client
+                })
+            lock.unlock()
+            guard mayBegin else { continue }
+            client.rotate()
+        }
+    }
+
+    /// Caller holds the lock. Nil weak references need no client callback and are safe to remove
+    /// on the timer queue; real lifecycle state is evaluated later on the main delivery queue.
+    private func pruneDeallocatedLocked() {
+        memberships.removeAll { $0.client == nil }
+    }
+
+    /// Reconcile interval and timer identity with membership as one locked transition.
+    ///
+    /// The returned source is no longer current. Canceling it after the unlock cannot clear or
+    /// cancel the timer installed by a later registration because cancellation targets the source
+    /// directly rather than consulting coordinator state again.
+    private func reconcileTimerLocked() -> DispatchSourceTimer? {
+        let updatedInterval = memberships.map(\.interval).min()
+            ?? RotationCoordinator.defaultInterval
+        let intervalChanged = updatedInterval != interval
+        interval = updatedInterval
+
+        guard !memberships.isEmpty else {
+            let detached = timer?.source
+            timer = nil
+            return detached
+        }
+
+        guard timer == nil || intervalChanged else { return nil }
+
+        let detached = timer?.source
+        nextTimerGeneration &+= 1
+        let generation = nextTimerGeneration
+        let source = DispatchSource.makeTimerSource(queue: queue)
+        source.schedule(deadline: .now() + updatedInterval,
+                        repeating: updatedInterval,
+                        leeway: .seconds(5))
+        source.setEventHandler { [weak self] in self?.tick(generation: generation) }
+        timer = TimerState(source: source, generation: generation)
+        source.resume()
+        return detached
     }
 }
