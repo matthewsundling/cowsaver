@@ -72,6 +72,198 @@ struct ConfigurationTests {
         #expect(result.warnings.contains { $0.contains("rotationSeconds") })
     }
 
+    private func numericValue(_ configuration: Configuration, for key: String) -> Double {
+        switch key {
+        case "rotationSeconds": configuration.rotationSeconds
+        case "wrapWidth": Double(configuration.wrapWidth)
+        case "fontSize": configuration.fontSize
+        case "sizeVariation": configuration.sizeVariation
+        case "maxFortuneLines": Double(configuration.maxFortuneLines)
+        default: fatalError("unknown numeric key in test")
+        }
+    }
+
+    private func booleanValue(_ configuration: Configuration, for key: String) -> Bool {
+        switch key {
+        case "randomCow": configuration.randomCow
+        case "reposition": configuration.reposition
+        case "adaptiveWrap": configuration.adaptiveWrap
+        case "weightByFile": configuration.weightByFile
+        case "debugFrame": configuration.debugFrame
+        default: fatalError("unknown Boolean key in test")
+        }
+    }
+
+    private func warning(_ result: Configuration.LoadResult, for key: String,
+                         containing text: String) -> Bool {
+        result.warnings.contains { $0.contains(key) && $0.contains(text) }
+    }
+
+    @Test func wholeNumberFieldsAcceptIntegralJSONNumbers() {
+        for key in ["rotationSeconds", "wrapWidth", "maxFortuneLines"] {
+            for value in ["40", "40.0"] {
+                let result = load("{\"\(key)\": \(value)}")
+                #expect(numericValue(result.configuration, for: key) == 40)
+                #expect(result.warnings.isEmpty)
+            }
+        }
+    }
+
+    @Test func wholeNumberFieldBoundariesClampAndWarn() {
+        let cases: [(key: String, lower: Double, upper: Double, ordinary: Double)] = [
+            ("rotationSeconds", 1, 600, 45),
+            ("wrapWidth", 2, 500, 40),
+            ("maxFortuneLines", 0, 100, 60),
+        ]
+        for item in cases {
+            for value in [item.lower, item.upper, item.ordinary] {
+                let result = load("{\"\(item.key)\": \(value)}")
+                #expect(numericValue(result.configuration, for: item.key) == value)
+                #expect(result.warnings.isEmpty)
+            }
+            for (value, expected) in [(item.lower - 1, item.lower), (item.upper + 1, item.upper)] {
+                let result = load("{\"\(item.key)\": \(value)}")
+                #expect(numericValue(result.configuration, for: item.key) == expected)
+                #expect(warning(result, for: item.key, containing: "clamped to \(Int(expected))"))
+            }
+        }
+    }
+
+    @Test func fontSizeFileBoundariesPreserveDecimalsAndClamp() {
+        let cases: [(input: Double, expected: Double, warning: Bool)] = [
+            (-1, 0, true), (0, 0, false), (1, 6, true), (5.9, 6, true),
+            (6, 6, false), (6.1, 6.1, false), (18.5, 18.5, false), (143.9, 143.9, false),
+            (144, 144, false), (145, 144, true),
+        ]
+        for item in cases {
+            let result = load("{\"fontSize\": \(item.input)}")
+            #expect(result.configuration.fontSize == item.expected)
+            #expect(warning(result, for: "fontSize", containing: "clamped") == item.warning)
+        }
+    }
+
+    @Test func sizeVariationFileBoundariesClampAndWarn() {
+        let cases: [(input: Double, expected: Double, warning: Bool)] = [
+            (-0.1, 0, true), (0, 0, false), (0.1, 0.1, false), (0.3, 0.3, false),
+            (0.9, 0.9, false), (1, 0.9, true),
+        ]
+        for item in cases {
+            let result = load("{\"sizeVariation\": \(item.input)}")
+            #expect(result.configuration.sizeVariation == item.expected)
+            #expect(warning(result, for: "sizeVariation", containing: "clamped") == item.warning)
+        }
+    }
+
+    @Test func hugeFiniteNumbersClampForEveryNumericField() {
+        let expected: [String: (negative: Double, positive: Double)] = [
+            "rotationSeconds": (1, 600), "wrapWidth": (2, 500),
+            "fontSize": (0, 144), "sizeVariation": (0, 0.9),
+            "maxFortuneLines": (0, 100),
+        ]
+        for (key, limits) in expected {
+            for (value, bounded) in [("-1e300", limits.negative), ("1e300", limits.positive)] {
+                let result = load("{\"\(key)\": \(value)}")
+                #expect(numericValue(result.configuration, for: key) == bounded)
+                #expect(warning(result, for: key, containing: "clamped to"))
+            }
+        }
+    }
+
+    @Test func wholeNumberFractionsUseDefaultsInsteadOfTruncating() {
+        let defaults = Configuration()
+        for key in ["rotationSeconds", "wrapWidth", "maxFortuneLines"] {
+            let result = load("{\"\(key)\": 40.5}")
+            #expect(numericValue(result.configuration, for: key) == numericValue(defaults, for: key))
+            #expect(warning(result, for: key, containing: "using default"))
+        }
+    }
+
+    @Test func JSONBooleansAreRejectedForEveryNumericField() {
+        let result = load("""
+        {"rotationSeconds": true, "wrapWidth": false, "fontSize": true,
+         "sizeVariation": false, "maxFortuneLines": true}
+        """)
+        let defaults = Configuration()
+        for key in ["rotationSeconds", "wrapWidth", "fontSize", "sizeVariation", "maxFortuneLines"] {
+            #expect(numericValue(result.configuration, for: key) == numericValue(defaults, for: key))
+            #expect(warning(result, for: key, containing: "using default"))
+        }
+    }
+
+    @Test func JSONNumbersAreRejectedForEveryBooleanField() {
+        let defaults = Configuration()
+        for key in ["randomCow", "reposition", "adaptiveWrap", "weightByFile", "debugFrame"] {
+            for value in [0, 1] {
+                let result = load("{\"\(key)\": \(value)}")
+                #expect(booleanValue(result.configuration, for: key) == booleanValue(defaults, for: key))
+                #expect(warning(result, for: key, containing: "using default"))
+            }
+        }
+    }
+
+    @Test func nonFiniteValuesUseDefaultsForEveryNumericField() {
+        let defaults = Configuration()
+        for key in ["rotationSeconds", "wrapWidth", "fontSize", "sizeVariation", "maxFortuneLines"] {
+            for value in [Double.nan, Double.infinity, -Double.infinity] {
+                let result = Configuration.load(object: [key: value])
+                #expect(numericValue(result.configuration, for: key) == numericValue(defaults, for: key))
+                #expect(warning(result, for: key, containing: "using default"))
+            }
+        }
+    }
+
+    @Test func invalidAndClampedFieldsDoNotDiscardValidSiblings() {
+        let invalid = load("""
+        {"wrapWidth": 40.5, "rotationSeconds": 20, "fontSize": 18.5, "randomCow": false}
+        """)
+        #expect(invalid.configuration.wrapWidth == 40)
+        #expect(invalid.configuration.rotationSeconds == 20)
+        #expect(invalid.configuration.fontSize == 18.5)
+        #expect(!invalid.configuration.randomCow)
+        #expect(warning(invalid, for: "wrapWidth", containing: "using default"))
+
+        let clamped = load("{\"maxFortuneLines\": 1e300, \"wrapWidth\": 60}")
+        #expect(clamped.configuration.maxFortuneLines == 100)
+        #expect(clamped.configuration.wrapWidth == 60)
+        #expect(warning(clamped, for: "maxFortuneLines", containing: "clamped to 100"))
+    }
+
+    @Test func directConfigurationsKeepDerivedNumericValuesSafe() {
+        var configuration = Configuration()
+        configuration.rotationSeconds = .nan
+        #expect(configuration.rotationInterval == 45)
+        configuration.rotationSeconds = .infinity
+        #expect(configuration.rotationInterval == 45)
+        configuration.rotationSeconds = -Double.greatestFiniteMagnitude
+        #expect(configuration.rotationInterval == 1)
+
+        configuration.wrapWidth = Int.max
+        #expect(configuration.effectiveWrapWidth == 500)
+        configuration.wrapWidth = Int.min
+        #expect(configuration.effectiveWrapWidth == 2)
+
+        configuration.sizeVariation = .nan
+        #expect(configuration.effectiveSizeVariation == 0)
+        configuration.sizeVariation = .infinity
+        #expect(configuration.effectiveSizeVariation == 0)
+        configuration.sizeVariation = -Double.greatestFiniteMagnitude
+        #expect(configuration.effectiveSizeVariation == 0)
+
+        configuration.fontSize = .nan
+        #expect(configuration.effectivePinnedFontSize == 0)
+        configuration.fontSize = .infinity
+        #expect(configuration.effectivePinnedFontSize == 0)
+        configuration.fontSize = -Double.greatestFiniteMagnitude
+        #expect(configuration.effectivePinnedFontSize == 0)
+        configuration.fontSize = Double.greatestFiniteMagnitude
+        #expect(configuration.effectivePinnedFontSize == 144)
+
+        configuration.maxFortuneLines = Int.max
+        #expect(configuration.fortuneLoadOptions.maxLines == 100)
+        configuration.maxFortuneLines = Int.min
+        #expect(configuration.fortuneLoadOptions.maxLines == 0)
+    }
+
     /// A misspelled key used to look exactly like a setting that had no effect (issue #12).
     @Test func anUnknownKeyWarnsAndNamesItself() {
         let result = load("{\"wrapWidth\": 50, \"somethingElse\": true}")
@@ -110,7 +302,7 @@ struct ConfigurationTests {
 
     // MARK: Clamping
 
-    @Test(arguments: [(0.0, 1.0), (-5.0, 1.0), (0.001, 1.0), (45.0, 45.0), (1e9, 86_400.0)])
+    @Test(arguments: [(0.0, 1.0), (-5.0, 1.0), (0.001, 1.0), (45.0, 45.0), (1e9, 600.0)])
     func rotationIntervalIsClamped(input: Double, expected: Double) {
         var configuration = Configuration()
         configuration.rotationSeconds = input
@@ -131,13 +323,11 @@ struct ConfigurationTests {
         #expect(configuration.effectiveSizeVariation == expected)
     }
 
-    /// Out of range is not an error, the way `rotationSeconds: 0` is not an error: the value
-    /// is kept as written, clamped in use, and the file loads without a word about it.
-    @Test func anOutOfRangeSizeVariationLoadsAndClampsQuietly() {
+    @Test func anOutOfRangeSizeVariationClampsWhileLoading() {
         let result = load("{\"sizeVariation\": 2.0}")
-        #expect(result.configuration.sizeVariation == 2.0)
+        #expect(result.configuration.sizeVariation == 0.9)
         #expect(result.configuration.effectiveSizeVariation == 0.9)
-        #expect(result.warnings.isEmpty)
+        #expect(warning(result, for: "sizeVariation", containing: "clamped to 0.9"))
     }
 
     @Test func sizeVariationOfTheWrongTypeKeepsTheDefault() {

@@ -162,9 +162,10 @@ public final class CowsaverContentView: NSView {
 
         // An explicitly pinned size is an explicit choice, so only auto-fit is contained; a
         // pinned size that cannot fit is clipped inside its own layer instead. See `frame(for:in:)`.
-        let metrics = configuration.fontSize > 0
+        let pinnedFontSize = configuration.effectivePinnedFontSize
+        let metrics = pinnedFontSize > 0
             ? Layout.metrics(block: block, theme: theme,
-                             fontSize: CGFloat(configuration.fontSize))
+                             fontSize: CGFloat(pinnedFontSize))
             : Layout.contained(varied(Layout.fit(block: block, theme: theme, in: canvas),
                                       of: block),
                                in: canvas)
