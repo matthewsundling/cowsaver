@@ -173,6 +173,11 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         return false
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Covers the windowed lifecycle; fullscreen and idle dismissal unregister earlier.
+        RotationCoordinator.shared.unregister(self)
+    }
+
     // MARK: Presentation
 
     private func showWindowed() {

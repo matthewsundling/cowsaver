@@ -8,6 +8,30 @@ private final class TestClient: RotationClient {
     func rotate() { rotations += 1 }
 }
 
+private final class DeliveryCapture {
+    private(set) var pending: [() -> Void] = []
+
+    func schedule(_ work: @escaping () -> Void) {
+        pending.append(work)
+    }
+
+    func runNext() {
+        pending.removeFirst()()
+    }
+}
+
+private final class CancellationCapture {
+    private(set) var pending: [DispatchSourceTimer] = []
+
+    func cancelLater(_ source: DispatchSourceTimer) {
+        pending.append(source)
+    }
+
+    func runNext() {
+        pending.removeFirst().cancel()
+    }
+}
+
 /// The coordinator owns the application's recurring rotation work. These tests verify that
 /// detached clients do not retain a timer.
 ///
@@ -113,6 +137,127 @@ struct RotationCoordinatorTests {
         let coordinator = RotationCoordinator(deliverOnMain: false)
         coordinator.tick()
         #expect(!coordinator.isRunning)
+    }
+
+    // MARK: Stale work
+
+    /// Delaying physical cancellation models the former interval between deciding to stop and
+    /// actually stopping. A registration made in that interval must install a new timer, and the
+    /// delayed operation must remain tied to the detached old source.
+    @Test func obsoleteCancellationCannotStopANewRegistration() {
+        let deliveries = DeliveryCapture()
+        let cancellations = CancellationCapture()
+        let coordinator = RotationCoordinator(
+            scheduleDelivery: deliveries.schedule,
+            cancelTimer: cancellations.cancelLater
+        )
+        let departed = TestClient()
+        let current = TestClient()
+
+        coordinator.register(departed, interval: 5)
+        let oldGeneration = coordinator.currentTimerGeneration
+        coordinator.unregister(departed)
+        #expect(cancellations.pending.count == 1)
+
+        coordinator.register(current, interval: 40)
+        let newGeneration = coordinator.currentTimerGeneration
+        #expect(newGeneration != oldGeneration)
+
+        cancellations.runNext()
+        #expect(coordinator.isRunning)
+        #expect(coordinator.effectiveInterval == 40)
+        #expect(coordinator.currentTimerGeneration == newGeneration)
+
+        coordinator.tick()
+        #expect(deliveries.pending.count == 1)
+        deliveries.runNext()
+        #expect(current.rotations == 1)
+
+        coordinator.unregister(current)
+        cancellations.runNext()
+    }
+
+    @Test func capturedDeliveryDoesNotRotateAfterUnregister() {
+        let deliveries = DeliveryCapture()
+        let coordinator = RotationCoordinator(scheduleDelivery: deliveries.schedule)
+        let client = TestClient()
+        coordinator.register(client, interval: 3600)
+
+        coordinator.tick()
+        #expect(deliveries.pending.count == 1)
+        coordinator.unregister(client)
+        deliveries.runNext()
+
+        #expect(client.rotations == 0)
+        #expect(!coordinator.isRunning)
+    }
+
+    /// The old queued block retains the old membership token, even though object identity is the
+    /// same after re-registration. Only work captured for the new lifetime may rotate it.
+    @Test func reRegisteringSameObjectDoesNotReviveOldDelivery() {
+        let deliveries = DeliveryCapture()
+        let coordinator = RotationCoordinator(scheduleDelivery: deliveries.schedule)
+        let anchor = TestClient()
+        let client = TestClient()
+        coordinator.register(anchor, interval: 5)
+        coordinator.register(client, interval: 20)
+
+        coordinator.tick()
+        coordinator.unregister(client)
+        coordinator.register(client, interval: 40)
+        deliveries.runNext()
+
+        #expect(client.rotations == 0)
+        #expect(anchor.rotations == 1)
+        #expect(coordinator.clientCount == 2)
+        #expect(coordinator.effectiveInterval == 5)
+
+        coordinator.unregister(anchor)
+        #expect(coordinator.effectiveInterval == 40)
+
+        coordinator.tick()
+        deliveries.runNext()
+        #expect(client.rotations == 1)
+
+        coordinator.unregister(client)
+    }
+
+    @Test func canceledTimerGenerationCannotReachNewMembership() {
+        let coordinator = RotationCoordinator(deliverOnMain: false)
+        let departed = TestClient()
+        let current = TestClient()
+        coordinator.register(departed, interval: 5)
+        let oldGeneration = coordinator.currentTimerGeneration
+
+        coordinator.unregister(departed)
+        coordinator.register(current, interval: 40)
+        let newGeneration = coordinator.currentTimerGeneration
+
+        if let oldGeneration { coordinator.tick(generation: oldGeneration) }
+        #expect(current.rotations == 0)
+        #expect(coordinator.currentTimerGeneration == newGeneration)
+        #expect(coordinator.effectiveInterval == 40)
+
+        if let newGeneration { coordinator.tick(generation: newGeneration) }
+        #expect(current.rotations == 1)
+
+        coordinator.unregister(current)
+    }
+
+    @Test func capturedClientThatBecomesIneligibleIsPruned() {
+        let deliveries = DeliveryCapture()
+        let coordinator = RotationCoordinator(scheduleDelivery: deliveries.schedule)
+        let client = TestClient()
+        coordinator.register(client, interval: 3600)
+        coordinator.tick()
+
+        client.isLive = false
+        deliveries.runNext()
+
+        #expect(client.rotations == 0)
+        #expect(coordinator.clientCount == 0)
+        #expect(!coordinator.isRunning)
+        #expect(coordinator.effectiveInterval == 45)
     }
 
     // MARK: Effective interval
