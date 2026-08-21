@@ -343,15 +343,58 @@ struct ConfigurationTests {
         #expect(ThemeColor(hex: hex) != nil)
     }
 
-    @Test(arguments: ["", "#12345", "zzzzzz", "#GGGGGG", "rgb(1,2,3)"])
+    @Test(arguments: ["", "#12", "#1234", "#12345", "#1234567", "zzzzzz", "#GGGGGG",
+                      "rgb(1,2,3)", " #123", "#123 ", "##123"])
     func rejectsBadHexColours(hex: String) {
         #expect(ThemeColor(hex: hex) == nil)
     }
 
-    @Test func badColourFallsBackRatherThanFailing() {
-        var configuration = Configuration()
-        configuration.foreground = "not a colour"
-        #expect(configuration.resolvedForeground.green > 0.5, "fell back to green phosphor")
+    @Test func colorFieldsPreserveEveryDocumentedSpelling() {
+        for key in ["foreground", "background"] {
+            for spelling in ["#AbC", "aBc", "#12aB9F", "12Ab9f"] {
+                let result = load("{\"\(key)\": \"\(spelling)\"}")
+                let stored = key == "foreground"
+                    ? result.configuration.foreground : result.configuration.background
+                #expect(stored == spelling)
+                #expect(result.warnings.isEmpty)
+            }
+        }
+    }
+
+    @Test func invalidColorsUseTheirStoredFieldDefaults() {
+        let cases: [(key: String, value: String)] = [
+            ("foreground", "#12"), ("foreground", "#GGG"),
+            ("background", "rgb(0,0,0)"), ("background", ""),
+        ]
+        for item in cases {
+            let result = load("{\"\(item.key)\": \"\(item.value)\"}")
+            let expected = item.key == "foreground" ? "#33FF66" : "#000000"
+            let stored = item.key == "foreground"
+                ? result.configuration.foreground : result.configuration.background
+            #expect(stored == expected)
+            #expect(warning(result, for: item.key, containing: "using \(expected)"))
+        }
+    }
+
+    @Test func nullAndWrongTypeColorsUseDefaultsIndependently() {
+        let result = load("""
+        {"foreground": null, "background": 123, "fontName": "Monaco"}
+        """)
+        #expect(result.configuration.foreground == "#33FF66")
+        #expect(result.configuration.background == "#000000")
+        #expect(result.configuration.fontName == "Monaco")
+        #expect(warning(result, for: "foreground", containing: "using #33FF66"))
+        #expect(warning(result, for: "background", containing: "using #000000"))
+    }
+
+    @Test func invalidForegroundDoesNotDiscardAValidBackground() {
+        let result = load("""
+        {"foreground": "nope", "background": "#123456"}
+        """)
+        #expect(result.configuration.theme == nil)
+        #expect(result.configuration.foreground == "#33FF66")
+        #expect(result.configuration.background == "#123456")
+        #expect(result.warnings.count == 1)
     }
 
     @Test func namedThemeOverridesRawColours() {
@@ -361,10 +404,58 @@ struct ConfigurationTests {
         #expect(configuration.resolvedForeground == ThemeColor(hex: "#FFB000"))
     }
 
-    @Test func unknownThemeIsIgnoredWithAWarning() {
+    @Test func everyThemePresetNormalizesToItsCanonicalName() {
+        for preset in ThemePreset.all {
+            let mixedCase = preset.name.uppercased()
+            let result = load("{\"theme\": \"\(mixedCase)\"}")
+            #expect(result.configuration.theme == preset.name)
+            #expect(result.configuration.jsonObject["theme"] as? String == preset.name)
+            #expect(result.warnings.isEmpty)
+        }
+    }
+
+    @Test func presentInvalidThemeUsesGreenPhosphorInsteadOfCustomColors() {
         let result = load("{\"theme\": \"chartreuse\", \"foreground\": \"#123456\"}")
-        #expect(result.configuration.resolvedForeground == ThemeColor(hex: "#123456"))
-        #expect(result.warnings.contains { $0.contains("chartreuse") })
+        #expect(result.configuration.theme == "green-phosphor")
+        #expect(result.configuration.foreground == "#123456", "raw fields still persist")
+        #expect(result.configuration.resolvedForeground == ThemeColor(hex: "#33FF66"))
+        #expect(warning(result, for: "theme", containing: "using green-phosphor"))
+    }
+
+    @Test func emptyNullAndWrongTypeThemesUseGreenPhosphor() {
+        for value in ["\"\"", "null", "false", "[]"] {
+            let result = load("{\"theme\": \(value), \"foreground\": \"#123456\"}")
+            #expect(result.configuration.theme == "green-phosphor")
+            #expect(result.configuration.resolvedForeground == ThemeColor(hex: "#33FF66"))
+            #expect(warning(result, for: "theme", containing: "using green-phosphor"))
+        }
+    }
+
+    @Test func omittedThemeWithoutColorsUsesTheDefaultPresetQuietly() {
+        let result = load("{\"fontName\": \"Monaco\"}")
+        #expect(result.configuration.theme == "green-phosphor")
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func omittedThemeWithCustomColorsKeepsValidValues() {
+        let result = load("{\"foreground\": \"ABC\", \"background\": \"123456\"}")
+        #expect(result.configuration.theme == nil)
+        #expect(result.configuration.foreground == "ABC")
+        #expect(result.configuration.background == "123456")
+        #expect(result.warnings.isEmpty)
+        #expect(result.configuration.jsonObject["theme"] == nil)
+    }
+
+    @Test func namedThemeWinsWhileRawFieldsStillValidateAndDefault() {
+        let result = load("""
+        {"theme": "AMBER", "foreground": "nope", "background": "#123456"}
+        """)
+        #expect(result.configuration.theme == "amber")
+        #expect(result.configuration.foreground == "#33FF66")
+        #expect(result.configuration.background == "#123456")
+        #expect(result.configuration.resolvedForeground == ThemeColor(hex: "#FFB000"))
+        #expect(result.configuration.resolvedBackground == ThemeColor(hex: "#000000"))
+        #expect(warning(result, for: "foreground", containing: "using #33FF66"))
     }
 
     @Test func allPresetsParse() {
@@ -374,7 +465,139 @@ struct ConfigurationTests {
         }
     }
 
-    // MARK: Face and balloon spelling
+    // MARK: Categorical strings, face, and font
+
+    @Test func balloonAndTransitionAcceptEveryOption() {
+        for (key, values) in [("balloonStyle", ["say", "think"]),
+                              ("transition", ["fade", "none"])] {
+            for value in values {
+                let result = load("{\"\(key)\": \"\(value)\"}")
+                #expect(result.configuration.jsonObject[key] as? String == value)
+                #expect(result.warnings.isEmpty)
+            }
+        }
+    }
+
+    @Test func balloonAndTransitionNormalizeMixedCaseWhenSerialized() {
+        let result = load("{\"balloonStyle\": \"ThInK\", \"transition\": \"NoNe\"}")
+        #expect(result.configuration.balloonStyle == "think")
+        #expect(result.configuration.transition == "none")
+        #expect(result.configuration.jsonObject["balloonStyle"] as? String == "think")
+        #expect(result.configuration.jsonObject["transition"] as? String == "none")
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func invalidBalloonAndTransitionValuesWarnAndUseDefaults() {
+        for json in [
+            "{\"balloonStyle\": \"shout\", \"transition\": \"slide\"}",
+            "{\"balloonStyle\": \"\", \"transition\": \"\"}",
+            "{\"balloonStyle\": 1, \"transition\": null}",
+        ] {
+            let result = load(json)
+            #expect(result.configuration.balloonStyle == "say")
+            #expect(result.configuration.transition == "fade")
+            #expect(warning(result, for: "balloonStyle", containing: "using say"))
+            #expect(warning(result, for: "transition", containing: "using fade"))
+        }
+    }
+
+    @Test func omittedBalloonAndTransitionUseDefaultsQuietly() {
+        let result = load("{}")
+        #expect(result.configuration.balloonStyle == "say")
+        #expect(result.configuration.transition == "fade")
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func directUnknownBalloonAndTransitionValuesRetainSafeDerivedBehavior() {
+        var configuration = Configuration()
+        configuration.balloonStyle = "shout"
+        configuration.transition = "slide"
+        #expect(configuration.balloonMode == .say)
+        #expect(configuration.wantsTransition)
+    }
+
+    @Test func everyCanonicalFaceModeAndAliasLoadsCaseInsensitively() {
+        for mode in FaceMode.allCases {
+            for spelling in [mode.rawValue, String(mode.flag)] {
+                let result = load("{\"face\": \"\(spelling.uppercased())\"}")
+                #expect(result.configuration.face == spelling)
+                #expect(result.configuration.faceModes == [mode])
+                #expect(result.warnings.isEmpty)
+            }
+        }
+    }
+
+    @Test func faceAcceptsCommaAndWhitespaceSeparatorsAndSerializesStably() {
+        let result = load("{\"face\": \"BoRg, D\\tYOUNG  s\"}")
+        #expect(result.configuration.face == "borg, d, young, s")
+        #expect(result.configuration.faceModes == [.borg, .dead, .young, .stoned])
+        #expect(result.configuration.jsonObject["face"] as? String == "borg, d, young, s")
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func faceRejectsBadTokensWithoutDiscardingRecognizedSiblings() {
+        let result = load("{\"face\": \"dead, Mystery y NOPE\"}")
+        #expect(result.configuration.face == "dead, y")
+        #expect(result.configuration.faceModes == [.dead, .young])
+        #expect(warning(result, for: "face", containing: "'Mystery'"))
+        #expect(warning(result, for: "face", containing: "'NOPE'"))
+        #expect(!result.warnings.contains { $0.contains("using default") })
+    }
+
+    @Test func allInvalidOrEmptyFaceUsesDefaultAndSaysSo() {
+        for value in ["mystery nope", ""] {
+            let result = load("{\"face\": \"\(value)\"}")
+            #expect(result.configuration.face == "default")
+            #expect(result.configuration.faceModes.isEmpty)
+            #expect(warning(result, for: "face", containing: "using default"))
+        }
+    }
+
+    @Test func defaultFaceAloneOrAlongsideModesHasNoModeOfItsOwn() {
+        let alone = load("{\"face\": \"DeFaUlT\"}")
+        #expect(alone.configuration.face == "default")
+        #expect(alone.configuration.faceModes.isEmpty)
+        #expect(alone.warnings.isEmpty)
+
+        let alongside = load("{\"face\": \"default, DEAD default y\"}")
+        #expect(alongside.configuration.face == "dead, y")
+        #expect(alongside.configuration.faceModes == [.dead, .young])
+        #expect(alongside.warnings.isEmpty)
+    }
+
+    @Test func wrongTypeFaceUsesDefaultWithAWarning() {
+        let result = load("{\"face\": [\"dead\"]}")
+        #expect(result.configuration.face == "default")
+        #expect(warning(result, for: "face", containing: "using default"))
+    }
+
+    @Test func normalizedFaceModesKeepCowsayPrecedence() {
+        let result = load("""
+        {"face": "young wired tired stoned paranoid greedy dead borg"}
+        """)
+        let face = Face.construct(modes: result.configuration.faceModes)
+        #expect(Bytes.describe(face.eyes) == "..", "young remains the final eye override")
+        #expect(Bytes.describe(face.tongue) == "U ", "dead and stoned still set the tongue")
+    }
+
+    @Test func fontNameLoadsAndTrimsSurroundingWhitespace() {
+        let ordinary = load("{\"fontName\": \"Monaco\"}")
+        #expect(ordinary.configuration.fontName == "Monaco")
+        #expect(ordinary.warnings.isEmpty)
+
+        let trimmed = load("{\"fontName\": \"  SF Mono\\n\"}")
+        #expect(trimmed.configuration.fontName == "SF Mono")
+        #expect(trimmed.configuration.jsonObject["fontName"] as? String == "SF Mono")
+        #expect(trimmed.warnings.isEmpty)
+    }
+
+    @Test func emptyWhitespaceAndWrongTypeFontNamesUseMenlo() {
+        for value in ["\"\"", "\" \\t\\n \"", "false", "null"] {
+            let result = load("{\"fontName\": \(value)}")
+            #expect(result.configuration.fontName == "Menlo")
+            #expect(warning(result, for: "fontName", containing: "using Menlo"))
+        }
+    }
 
     @Test(arguments: [
         (input: "tired", expected: Set<FaceMode>([.tired])),
@@ -397,6 +620,65 @@ struct ConfigurationTests {
         #expect(configuration.balloonMode == .say, "tired eyes must not imply a thought bubble")
         configuration.balloonStyle = "think"
         #expect(configuration.balloonMode == .think)
+    }
+
+    // MARK: Cowfile list decoding
+
+    @Test func emptyCowfileArrayIsIntentionalAndQuiet() {
+        let result = load("{\"cowfiles\": []}")
+        #expect(result.configuration.cowfiles.isEmpty)
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func cowfileArrayPreservesExactOrderedNames() {
+        let result = load("{\"cowfiles\": [\"Tux\", \"dragon.cow\", \" tux \"], \"randomCow\": false}")
+        #expect(result.configuration.cowfiles == ["Tux", "dragon.cow", " tux "])
+        #expect(!result.configuration.randomCow)
+        #expect(result.warnings.isEmpty, "membership belongs to the runtime library")
+    }
+
+    @Test func mixedCowfileArrayWarnsByExactIndexAndKeepsStrings() {
+        let result = load("""
+        {"cowfiles": ["tux", 12, "dragon", null, false, "default"], "wrapWidth": 60}
+        """)
+        #expect(result.configuration.cowfiles == ["tux", "dragon", "default"])
+        #expect(result.configuration.wrapWidth == 60)
+        for index in [1, 3, 4] {
+            #expect(result.warnings.contains {
+                $0.contains("cowfiles[\(index)]") && $0.contains("ignored")
+            })
+        }
+        #expect(result.warnings.count == 3)
+    }
+
+    @Test func duplicateCowfilesAreRemovedAfterTheirFirstExactOccurrence() {
+        let result = load("""
+        {"cowfiles": ["tux", "dragon", "tux", "TUX", "dragon", "default"]}
+        """)
+        #expect(result.configuration.cowfiles == ["tux", "dragon", "TUX", "default"])
+        #expect(result.warnings.contains {
+            $0.contains("cowfiles[2]") && $0.contains("'tux'")
+        })
+        #expect(result.warnings.contains {
+            $0.contains("cowfiles[4]") && $0.contains("'dragon'")
+        })
+        #expect(result.warnings.count == 2)
+    }
+
+    @Test func nonArrayCowfilesUseTheDefaultWithoutDiscardingSiblings() {
+        for value in ["\"tux\"", "123", "null", "true", "{}"] {
+            let result = load("{\"cowfiles\": \(value), \"transition\": \"none\"}")
+            #expect(result.configuration.cowfiles == Configuration().cowfiles)
+            #expect(result.configuration.transition == "none")
+            #expect(warning(result, for: "cowfiles", containing: "using default"))
+        }
+    }
+
+    @Test func normalizedCowfileListRoundTripsExactly() {
+        let loaded = load("{\"cowfiles\": [\"tux\", 1, \"dragon\", \"tux\"]}")
+        let roundTrip = Configuration.load(object: loaded.configuration.jsonObject)
+        #expect(roundTrip.configuration.cowfiles == ["tux", "dragon"])
+        #expect(roundTrip.warnings.isEmpty)
     }
 
     // MARK: The persisted schema
@@ -433,6 +715,18 @@ struct ConfigurationTests {
         let result = Configuration.load(object: Configuration().jsonObject)
         #expect(result.configuration == Configuration())
         #expect(result.warnings.isEmpty)
+    }
+
+    @Test func documentedExampleRoundTripsExactlyWithoutWarnings() throws {
+        let url = GoldenTests.repositoryRoot.appendingPathComponent("docs/config.example.json")
+        let data = try Data(contentsOf: url)
+        let parsed = try JSONSerialization.jsonObject(with: data)
+        let object = try #require(parsed as? [String: Any])
+        let result = Configuration.load(data: data)
+
+        #expect(result.warnings.isEmpty)
+        #expect(result.configuration == Configuration())
+        #expect(NSDictionary(dictionary: result.configuration.jsonObject).isEqual(to: object))
     }
 
     /// An unset theme means "use my own colours". Writing it as "" would both warn on every
@@ -484,6 +778,19 @@ struct ConfigurationTests {
 struct EngineTests {
     private var resources: URL { GoldenTests.repositoryRoot.appendingPathComponent("Resources") }
 
+    private func cowFixtureDirectory(_ names: [String]) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cowsaver-engine-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for name in names {
+            let source = "$the_cow = <<'EOC';\n\(name)-fixture-cow\nEOC\n"
+            try Data(source.utf8).write(
+                to: directory.appendingPathComponent(name).appendingPathExtension("cow")
+            )
+        }
+        return directory
+    }
+
     @Test func rendersFromTheBundledResources() {
         let engine = CowsaverEngine(
             configuration: Configuration(),
@@ -519,31 +826,102 @@ struct EngineTests {
         #expect(block.contains("^__^"), "the built-in cow should be recognisable")
     }
 
-    /// A typo in `cowfiles` should cost you your preference, not your screensaver.
-    @Test func unknownCowfileNamesFallBackToEverythingAvailable() {
+    @Test func partialConfiguredMatchesKeepOrderAndReportEveryUnavailableName() throws {
+        let cows = try cowFixtureDirectory(["alpha", "beta"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
         var configuration = Configuration()
-        configuration.cowfiles = ["definitely-not-a-cow", "nor-this"]
+        configuration.randomCow = false
+        configuration.cowfiles = ["missing-first", "beta", "alpha", "missing-last"]
         let engine = CowsaverEngine(
             configuration: configuration,
-            cowDirectories: [resources.appendingPathComponent("cows")],
-            fortuneDirectories: [resources.appendingPathComponent("fortune-curated")],
+            cowDirectories: [cows],
             seed: 2
         )
         #expect(!engine.diagnostics.usingBuiltInCow)
-        #expect(engine.diagnostics.notes.contains { $0.contains("configured cowfiles") })
-        #expect(!engine.nextBlock().isEmpty)
+        #expect(engine.diagnostics.notes.contains {
+            $0 == "unavailable configured cowfiles: missing-first, missing-last"
+        })
+        #expect(engine.nextBlock().contains("beta-fixture-cow"))
     }
 
-    @Test func emptyCowfileListStillRenders() {
+    @Test func allInvalidConfiguredNamesUseAvailableDefaultCowsFirst() throws {
+        let cows = try cowFixtureDirectory(["other", "tux", "default"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
+        var configuration = Configuration()
+        configuration.randomCow = false
+        configuration.cowfiles = ["missing", "also-missing"]
+        let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 3)
+
+        #expect(engine.nextBlock().contains("default-fixture-cow"),
+                "the first available name in the documented default order is pinned")
+        #expect(engine.diagnostics.notes.contains {
+            $0 == "no configured cowfiles loaded; using default cowfiles: default, tux"
+        })
+    }
+
+    @Test func missingConfiguredAndDefaultCowsUseAllAvailableCows() throws {
+        let cows = try cowFixtureDirectory(["zeta", "alpha"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
+        var configuration = Configuration()
+        configuration.randomCow = false
+        configuration.cowfiles = ["missing"]
+        let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 4)
+
+        #expect(engine.nextBlock().contains("alpha-fixture-cow"),
+                "all-library fallback is sorted and deterministic")
+        #expect(engine.diagnostics.notes.contains {
+            $0 == "no configured or default cowfiles loaded; using all 2 available cowfiles"
+        })
+    }
+
+    @Test func emptyCowfileListUsesEveryAvailableCow() throws {
+        let cows = try cowFixtureDirectory(["zeta", "alpha"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
         var configuration = Configuration()
         configuration.cowfiles = []
+        configuration.randomCow = false
         let engine = CowsaverEngine(
             configuration: configuration,
-            cowDirectories: [resources.appendingPathComponent("cows")],
-            fortuneDirectories: [resources.appendingPathComponent("fortune-curated")],
-            seed: 3
+            cowDirectories: [cows],
+            seed: 5
         )
-        #expect(!engine.nextBlock().isEmpty)
+        #expect(engine.nextBlock().contains("alpha-fixture-cow"))
+        #expect(!engine.diagnostics.usingBuiltInCow)
+        #expect(!engine.diagnostics.notes.contains { $0.contains("configured cowfiles") })
+    }
+
+    @Test func directDuplicateCowfilesAreIgnoredBeforeSelection() throws {
+        let cows = try cowFixtureDirectory(["alpha", "beta"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
+        var configuration = Configuration()
+        configuration.cowfiles = ["beta", "beta", "alpha", "beta"]
+        let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 6)
+        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+
+        #expect(blocks.allSatisfy {
+            $0.contains("alpha-fixture-cow") || $0.contains("beta-fixture-cow")
+        })
+        #expect(blocks.contains { $0.contains("alpha-fixture-cow") })
+        #expect(blocks.contains { $0.contains("beta-fixture-cow") })
+        #expect(engine.diagnostics.notes.filter { $0.contains("duplicate configured cowfile") }.count == 2)
+    }
+
+    @Test func randomCowFalsePinsFirstLoadableConfiguredName() throws {
+        let cows = try cowFixtureDirectory(["alpha", "beta"])
+        defer { try? FileManager.default.removeItem(at: cows) }
+
+        var configuration = Configuration()
+        configuration.randomCow = false
+        configuration.cowfiles = ["missing", "beta", "alpha"]
+        let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 7)
+        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+
+        #expect(blocks.allSatisfy { $0.contains("beta-fixture-cow") })
     }
 
     @Test func randomCowFalsePinsASingleCow() {

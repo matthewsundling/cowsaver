@@ -59,17 +59,17 @@ next time the screensaver starts, so stop and start it afterwards.
 |---|---|---|---|
 | `rotationSeconds` | whole number | `45` | 1–600 seconds. |
 | `wrapWidth` | whole number | `40` | 2–500 columns. |
-| `cowfiles` | array of strings | `["stegosaurus", "default", "tux", "dragon"]` | `[]` means every bundled cowfile. |
+| `cowfiles` | array | `["stegosaurus", "default", "tux", "dragon"]` | Ordered, unique, exact cowfile names; `[]` means every loadable cowfile. |
 | `randomCow` | boolean | `true` | — |
 | `face` | string | `"default"` | Face names, single letters, or a comma- or space-separated list. |
-| `balloonStyle` | string | `"say"` | `say` or `think`; any other value is `say`. |
-| `fontName` | string | `"Menlo"` | Any installed fixed-pitch face; otherwise a fallback chain. |
+| `balloonStyle` | string | `"say"` | `say` or `think`, case-insensitively; invalid values warn and use `say`. |
+| `fontName` | string | `"Menlo"` | A non-empty name; rendering requires fixed pitch and otherwise uses a fallback chain. |
 | `fontSize` | number | `0` | `0` auto-fits; otherwise 6–144 points. Decimal pinned sizes are valid. |
 | `sizeVariation` | number | `0` | 0–0.9. Applies to auto-fit only. |
 | `foreground` | string | `"#33FF66"` | `#RGB` or `#RRGGBB`, with or without the `#`. |
 | `background` | string | `"#000000"` | Same as `foreground`. |
 | `theme` | string | `green-phosphor` | `green-phosphor`, `amber`, `paperwhite`, `solarized-dark`. |
-| `transition` | string | `"fade"` | `none` disables the fade; any other value keeps it. |
+| `transition` | string | `"fade"` | `fade` or `none`, case-insensitively; invalid values warn and use `fade`. |
 | `reposition` | boolean | `true` | — |
 | `adaptiveWrap` | boolean | `true` | — |
 | `maxFortuneLines` | whole number | `60` | 0–100; `0` means no limit. |
@@ -87,12 +87,24 @@ and warn. A finite value outside its range clamps to the nearest supported value
 above `144` becomes `144`. A problem with one field never prevents valid settings in the same
 file from loading.
 
+Categorical values are matched case-insensitively and stored in their documented lowercase
+form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` therefore becomes
+`"think"`.
+
 ### Content
 
-- **`cowfiles`** lists the cowfiles Cowsaver may draw. Names are matched against the bundled
-  set below; a name that does not match is skipped. An empty list means every bundled
-  cowfile, and so does a list in which nothing matched — in that case Cowsaver also logs a
-  note saying so. Unlike cowsay's `COWPATH`, this set is fixed at what Cowsaver bundles.
+- **`cowfiles`** lists the cowfiles Cowsaver may draw. Each string is preserved in order and
+  matched exactly and case-sensitively against the names that actually loaded. Use the resource
+  name without its `.cow` suffix; Cowsaver does not lowercase or trim a name into a different
+  one. A non-string array entry is ignored with a warning that gives its exact index. A duplicate
+  string is ignored after its first occurrence and warns with its index and name. An empty array
+  intentionally means every loadable cowfile.
+
+  At runtime, unavailable configured names are logged even when other configured names load. If
+  none load, Cowsaver tries the default four in their documented order. If none of those loaded,
+  it uses every cow that did load; if the library is empty, it uses the compiled-in cow. Each
+  recovery logs which fallback was chosen. A value other than an array warns and uses the default
+  four-name list.
 - **`randomCow`** picks a new cowfile each rotation, avoiding the last few. Set it to
   `false` to keep one cow: the first name in `cowfiles` that actually loaded.
 - **`maxFortuneLines`** is a corpus filter, not a truncation. A fortune taller than this
@@ -129,10 +141,12 @@ file from loading.
   kept inside the screen like any other.
 - **`reposition`** places each new block at a random position, kept off the very edge. Set
   it to `false` to centre every block.
-- **`fontName`** must name an installed fixed-pitch face; the balloon borders only line up
-  in one. If it is missing or proportional, Cowsaver falls back through Menlo, SF Mono,
-  Monaco, and Courier New, and finally to the system monospaced font. There is no warning
-  for this — the fallback always succeeds.
+- **`fontName`** must be a non-empty name. Surrounding whitespace is removed; an empty or
+  whitespace-only value warns and stores `Menlo`. File loading does not inspect installed fonts.
+  At render time the name must resolve to a fixed-pitch face, because the balloon borders only
+  line up in one. A missing or proportional face falls back through Menlo, SF Mono, Monaco, and
+  Courier New, and finally to the system monospaced font. There is no render-time warning — the
+  fallback always succeeds.
 
 ### Appearance
 
@@ -146,21 +160,29 @@ file from loading.
   | `paperwhite` | `#2B2B2B` | `#F5F2E8` |
   | `solarized-dark` | `#93A1A1` | `#002B36` |
 
-- **`foreground`** and **`background`** are your own colours. Setting either one without
+- **`foreground`** and **`background`** are your own colours. Each accepts exactly three or six
+  hexadecimal digits, with or without `#`; valid spelling and letter case are preserved. An
+  invalid `foreground` warns and stores `#33FF66`, while an invalid `background` warns and stores
+  `#000000`, independently of the other field. Setting either one without
   also naming a `theme` drops the shipped preset, so the colours you wrote are the ones you
   get. Naming a theme in the same file is how you ask for the preset instead; the preset
-  then supplies both colours and these two are ignored.
+  then supplies both resolved colours. The raw fields still have to be valid because they remain
+  persisted.
 
-  Do not try to clear a theme by setting it to an empty string, which is not a preset name
-  and warns on every load. Remove the key. This is what the settings window's *custom
-  colours* option does, and it is why a saved file has no `theme` key when that option is
-  selected.
-- **`transition`** controls the 0.6-second crossfade between fortunes. `none` turns it off.
+  Omitting all three appearance keys uses `green-phosphor` without warning. Omitting `theme`
+  while supplying either raw colour is the one spelling for custom colours. A present but empty,
+  null, wrongly typed, or unknown `theme` is invalid: it warns and uses `green-phosphor`, rather
+  than activating the raw colours. This is why a saved custom-colour file has no `theme` key.
+- **`transition`** controls the 0.6-second crossfade between fortunes. It accepts `fade` or
+  `none`; `none` turns the crossfade off.
 - **`face`** applies cowsay's face modes. It accepts full names — `borg`, `dead`, `greedy`,
   `paranoid`, `stoned`, `tired`, `wired`, `young` — the single letters cowsay uses for them
-  (`b`, `d`, `g`, `p`, `s`, `t`, `w`, `y`), or several separated by commas or spaces:
-  `"dead"`, `"d"`, and `"dead, young"` are all valid. Unrecognized words are ignored, which
-  is how the default value `"default"` means the ordinary face. With several modes, cowsay's
+  (`b`, `d`, `g`, `p`, `s`, `t`, `w`, `y`), or several separated by commas or whitespace:
+  `"dead"`, `"d"`, and `"dead, young"` are all valid. Matching is case-insensitive. Recognized
+  tokens are kept in input order and stored in lowercase, separated by a comma and a space.
+  Every unrecognized token is named in a warning while recognized neighbors survive. `default`
+  means the ordinary face and adds no mode when another recognized mode is present. If no
+  recognized token remains, Cowsaver stores `default` and says so. With several modes, cowsay's
   own precedence decides the eyes.
 - **`balloonStyle`** is `say` or `think`. `think` draws cowsay's thought balloon. Note that
   the `tired` face mode is not a thought balloon, despite cowsay's `-t` flag.
@@ -202,11 +224,14 @@ on its own, so one bad value costs you that value and nothing else:
   uses that setting's default and warns: `"wrapWidth": "wide"` warns that it expected a number.
 - A finite number outside a setting's supported range is clamped to its nearest supported value
   and warns which value was used.
-- `cowfiles` warns `expected a list of names` unless it is a list of strings.
-- A `theme` that is not a preset warns and is dropped, leaving `foreground` and `background`
-  in effect.
-- A `foreground` or `background` that is not a hex colour warns and falls back to green on
-  black.
+- A non-array `cowfiles` warns and uses the default four names. Inside an array, bad entries and
+  later duplicates are ignored individually, with their exact indices, while valid siblings stay.
+- A present `theme` that is not a preset warns and uses `green-phosphor`. Remove the key to use
+  raw custom colours.
+- A bad `foreground` or `background` warns and stores that field's default (`#33FF66` or
+  `#000000`) without discarding a valid sibling.
+- Invalid `balloonStyle`, `transition`, `face`, and `fontName` values name the field, warn, and
+  state the value used for recovery.
 - A file that is not valid JSON, or is JSON but not an object, warns and yields the shipped
   defaults entire.
 - **A key Cowsaver does not know is named and ignored**, so a misspelled one no longer looks

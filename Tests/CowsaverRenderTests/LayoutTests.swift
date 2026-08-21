@@ -158,14 +158,25 @@ struct ThemeTests {
         #expect(font.isFixedPitch)
     }
 
-    /// Balloon borders only line up in a monospaced face, so an unknown or proportional
-    /// font name must never be honoured — it has to fall through to something fixed-pitch.
-    @Test(arguments: ["NoSuchFontExists", "Helvetica", ""])
-    func fallsBackToAMonospacedFont(name: String) {
+    @Test func missingConfiguredFontFallsBackToAFixedPitchFont() {
         var configuration = Configuration()
-        configuration.fontName = name
+        configuration.fontName = "Cowsaver-No-Such-Font-Exists"
         let font = Theme(configuration: configuration).font(ofSize: 18)
-        #expect(font.isFixedPitch, "\(name) resolved to a proportional font")
+        #expect(font.isFixedPitch)
+        #expect(font.pointSize == 18)
+    }
+
+    /// Balloon borders only line up in a monospaced face, so a proportional configured
+    /// face must never be honoured even though AppKit can resolve it.
+    @Test func proportionalConfiguredFontFallsBackToAFixedPitchFont() throws {
+        let proportional = try #require(NSFont(name: "Helvetica", size: 18))
+        #expect(!proportional.isFixedPitch, "the test requires a known proportional system font")
+
+        var configuration = Configuration()
+        configuration.fontName = "Helvetica"
+        let font = Theme(configuration: configuration).font(ofSize: 18)
+        #expect(font.isFixedPitch)
+        #expect(font.pointSize == 18)
     }
 
     @Test func appliesThemePresetColours() {

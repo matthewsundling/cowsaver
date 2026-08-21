@@ -39,14 +39,45 @@ public final class CowsaverEngine {
         diagnostics.cowfilesLoaded = library.cows.count
         diagnostics.cowfilesRejected = library.failures.map { "\($0.name): \($0.reason)" }
 
-        // Use configured cow names when they resolve; otherwise use every loaded cow.
-        var enabled = configuration.cowfiles.compactMap { library.cow(named: $0) }
-        if enabled.isEmpty, !library.isEmpty {
+        var seenNames: Set<String> = []
+        var configuredNames: [String] = []
+        for name in configuration.cowfiles {
+            if seenNames.insert(name).inserted {
+                configuredNames.append(name)
+            } else {
+                diagnostics.notes.append("duplicate configured cowfile '\(name)' ignored")
+            }
+        }
+
+        var enabled: [Cowfile]
+        if configuredNames.isEmpty {
+            // The empty spelling intentionally means every cow the selected library loaded.
             enabled = library.names.compactMap { library.cow(named: $0) }
-            if !configuration.cowfiles.isEmpty {
+        } else {
+            enabled = configuredNames.compactMap { library.cow(named: $0) }
+            let unavailable = configuredNames.filter { library.cow(named: $0) == nil }
+            if !unavailable.isEmpty {
                 diagnostics.notes.append(
-                    "none of the configured cowfiles loaded; using all \(enabled.count) available"
+                    "unavailable configured cowfiles: \(unavailable.joined(separator: ", "))"
                 )
+            }
+
+            if enabled.isEmpty {
+                let defaultNames = Configuration().cowfiles
+                enabled = defaultNames.compactMap { library.cow(named: $0) }
+                if !enabled.isEmpty {
+                    let loadedNames = defaultNames.filter { library.cow(named: $0) != nil }
+                    diagnostics.notes.append(
+                        "no configured cowfiles loaded; using default cowfiles: "
+                            + loadedNames.joined(separator: ", ")
+                    )
+                } else if !library.isEmpty {
+                    enabled = library.names.compactMap { library.cow(named: $0) }
+                    diagnostics.notes.append(
+                        "no configured or default cowfiles loaded; using all "
+                            + "\(enabled.count) available cowfiles"
+                    )
+                }
             }
         }
         if enabled.isEmpty {
