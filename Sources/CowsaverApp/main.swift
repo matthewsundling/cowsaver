@@ -282,12 +282,9 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         settings = nil
     }
 
-    /// Write the settings, then bring this process into line with them.
+    /// The sheet has already validated and written `config.json` by the time this runs.
+    /// Bring this process into line with what it wrote.
     private func applySaved(_ updated: Configuration) {
-        if let error = ConfigurationSheet.persist(updated) {
-            FileHandle.standardError.write(Data("cowsaver: \(error)\n".utf8))
-            return
-        }
         print(ResourceLocations.canonicalConfigurationURL().path)
 
         configuration = updated

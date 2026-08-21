@@ -10,7 +10,14 @@ import os.log
 /// It is built programmatically, so its layout remains alongside the controls it creates.
 public final class ConfigurationSheet: NSObject {
     public private(set) var window: NSWindow!
+    /// The configuration OK last accepted: the starting point for the next save candidate,
+    /// and what a failed save leaves untouched.
     private var configuration: Configuration
+    /// Writes the candidate configuration. A test injects a deterministic stand-in; the real
+    /// window uses `writeToDisk`.
+    private let persister: (Configuration) -> SaveOutcome
+    /// Called exactly once per successful save, after persistence has already succeeded.
+    /// Never called for an invalid or unpersisted attempt.
     private let onSave: (Configuration) -> Void
 
     // Controls are internal so the round-trip test can drive them.
@@ -25,7 +32,12 @@ public final class ConfigurationSheet: NSObject {
     var repositionBox: NSButton!
     var sizeVariationBox: NSButton!
     var transitionBox: NSButton!
+    var restoreButton: NSButton!
+    var cancelButton: NSButton!
     var okButton: NSButton!
+    /// The inline save/validation error, shown near the fixed action buttons so it stays
+    /// visible whether this window is hosted as a sheet or as the standalone app's window.
+    var errorLabel: NSTextField!
     /// One checkbox per bundled cow, in the order the list shows them.
     private(set) var cowfileBoxes: [NSButton] = []
 
@@ -46,13 +58,17 @@ public final class ConfigurationSheet: NSObject {
                   onSave: onSave)
     }
 
-    /// The cow names are injectable so tests do not depend on a bundle being present, and
-    /// the height cap so a test can describe a screen this machine does not have.
+    /// The cow names are injectable so tests do not depend on a bundle being present, the
+    /// height cap so a test can describe a screen this machine does not have, and the
+    /// persister so a test can produce a deterministic write failure without touching a real
+    /// user configuration or depending on file permissions.
     init(configuration: Configuration,
          cowfileNames: [String],
          maximumContentHeight: CGFloat? = ConfigurationSheet.availableContentHeight(),
+         persister: @escaping (Configuration) -> SaveOutcome = ConfigurationSheet.writeToDisk,
          onSave: @escaping (Configuration) -> Void) {
         self.configuration = configuration
+        self.persister = persister
         self.onSave = onSave
         super.init()
         buildWindow(cowfileNames: cowfileNames, maximumContentHeight: maximumContentHeight)
@@ -158,32 +174,50 @@ public final class ConfigurationSheet: NSObject {
         stack.addArrangedSubview(NSButton(title: "Reveal config.json in Finder",
                                           target: self, action: #selector(revealConfiguration)))
 
-        let restore = NSButton(title: "Restore Defaults", target: self,
-                               action: #selector(restoreDefaults))
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
-        cancel.keyEquivalent = "\u{1b}"
+        restoreButton = NSButton(title: "Restore Defaults", target: self,
+                                 action: #selector(restoreDefaults))
+        cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+        cancelButton.keyEquivalent = "\u{1b}"
         okButton = NSButton(title: "OK", target: self, action: #selector(save))
         okButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [NSView(), restore, cancel, okButton])
+        let buttons = NSStackView(views: [NSView(), restoreButton, cancelButton, okButton])
         buttons.orientation = .horizontal
         buttons.spacing = 12
-        buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        // The controls scroll; the buttons do not. A window capped shorter than its controls
-        // still has to offer Restore Defaults, Cancel, and OK, or it cannot be dismissed.
+        // Hidden until a save fails, so it costs no space in the common case: an NSStackView
+        // collapses a hidden arranged view instead of reserving a blank line for it.
+        errorLabel = NSTextField(wrappingLabelWithString: "")
+        errorLabel.font = .systemFont(ofSize: 11)
+        errorLabel.textColor = .systemRed
+        errorLabel.preferredMaxLayoutWidth = width - 40
+        errorLabel.isHidden = true
+
+        let bottomStack = NSStackView(views: [errorLabel, buttons])
+        bottomStack.orientation = .vertical
+        bottomStack.alignment = .leading
+        bottomStack.spacing = 8
+        bottomStack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            errorLabel.widthAnchor.constraint(equalTo: bottomStack.widthAnchor),
+            buttons.widthAnchor.constraint(equalTo: bottomStack.widthAnchor),
+        ])
+
+        // The controls scroll; the bottom cluster does not. A window capped shorter than its
+        // controls still has to offer Restore Defaults, Cancel, OK, and any error, or it
+        // cannot be dismissed or explained.
         let scroll = scrollingDocument(stack)
         let content = NSView()
         content.addSubview(scroll)
-        content.addSubview(buttons)
+        content.addSubview(bottomStack)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: content.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -buttonGap),
-            buttons.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
-            buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor,
-                                            constant: -buttonMargin),
+            scroll.bottomAnchor.constraint(equalTo: bottomStack.topAnchor, constant: -buttonGap),
+            bottomStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            bottomStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            bottomStack.bottomAnchor.constraint(equalTo: content.bottomAnchor,
+                                                constant: -buttonMargin),
         ])
         window.contentView = content
         apply(configuration)
@@ -191,7 +225,7 @@ public final class ConfigurationSheet: NSObject {
         // and cap that at the room the screen has: the same height as before wherever it
         // fits, and a scrolling document rather than unreachable buttons where it does not.
         content.layoutSubtreeIfNeeded()
-        let natural = stack.fittingSize.height + buttons.fittingSize.height
+        let natural = stack.fittingSize.height + bottomStack.fittingSize.height
             + buttonGap + buttonMargin
         window.setContentSize(NSSize(width: width,
                                      height: min(natural, maximumContentHeight ?? natural)))
@@ -296,11 +330,17 @@ public final class ConfigurationSheet: NSObject {
     // MARK: Controls and configuration
 
     /// Put a configuration into the controls. Nothing is written until OK.
+    ///
+    /// A configuration built directly in code, rather than loaded from a file, can hold a
+    /// non-finite or extreme numeric value in any field. Each field is displayed through its
+    /// defensive `effective...` value so this never traps and always shows a supported,
+    /// in-range number.
     func apply(_ configuration: Configuration) {
-        rotationField.stringValue = String(Int(configuration.rotationSeconds))
-        wrapField.stringValue = String(configuration.wrapWidth)
-        maxLinesField.stringValue = String(configuration.maxFortuneLines)
-        fontSizeField.stringValue = String(Int(configuration.fontSize))
+        clearError()
+        rotationField.stringValue = String(Int(configuration.rotationInterval))
+        wrapField.stringValue = String(configuration.effectiveWrapWidth)
+        maxLinesField.stringValue = String(configuration.effectiveMaxFortuneLines)
+        fontSizeField.stringValue = fontSizeDisplayString(configuration.effectivePinnedFontSize)
 
         if let theme = configuration.theme, ThemePreset.named(theme) != nil {
             themePopup.selectItem(withTitle: theme)
@@ -312,8 +352,8 @@ public final class ConfigurationSheet: NSObject {
         adaptiveWrapBox.state = configuration.adaptiveWrap ? .on : .off
         randomCowBox.state = configuration.randomCow ? .on : .off
         repositionBox.state = configuration.reposition ? .on : .off
-        sizeVariationBox.state = configuration.sizeVariation > 0 ? .on : .off
-        loadedSizeVariation = configuration.sizeVariation
+        sizeVariationBox.state = configuration.effectiveSizeVariation > 0 ? .on : .off
+        loadedSizeVariation = configuration.effectiveSizeVariation
         transitionBox.state = configuration.wantsTransition ? .on : .off
 
         // An empty list means every bundled cow, which shows as all of them checked.
@@ -335,28 +375,80 @@ public final class ConfigurationSheet: NSObject {
 
     @objc private func cancel() { close() }
 
+    /// Validate every control, attempt to persist the result, and only then accept it.
+    ///
+    /// Order matters: nothing here mutates `configuration` (the sheet's accepted state)
+    /// until persistence has actually succeeded, so a rejected value or a failed write
+    /// leaves both the controls and the running front end exactly as they were.
     @objc func save() {
-        // Read values independently; Configuration applies the same range checks as file loading.
-        var updated = configuration
-        if let value = Double(rotationField.stringValue) { updated.rotationSeconds = value }
-        if let value = Int(wrapField.stringValue) { updated.wrapWidth = value }
-        if let value = Int(maxLinesField.stringValue) { updated.maxFortuneLines = value }
-        if let value = Double(fontSizeField.stringValue) { updated.fontSize = value }
+        var candidate = configuration
+
+        guard let rotation = wholeNumber(rotationField.stringValue,
+                                         in: Configuration.rotationSecondsRange) else {
+            showValidationError(
+                "Seconds between fortunes must be a whole number from "
+                    + "\(Configuration.rotationSecondsRange.lowerBound) to "
+                    + "\(Configuration.rotationSecondsRange.upperBound).",
+                field: rotationField)
+            return
+        }
+        candidate.rotationSeconds = Double(rotation)
+
+        guard let wrap = wholeNumber(wrapField.stringValue,
+                                     in: Configuration.wrapWidthRange) else {
+            showValidationError(
+                "Narrowest wrap column must be a whole number from "
+                    + "\(Configuration.wrapWidthRange.lowerBound) to "
+                    + "\(Configuration.wrapWidthRange.upperBound).",
+                field: wrapField)
+            return
+        }
+        candidate.wrapWidth = wrap
+
+        guard let maxLines = wholeNumber(maxLinesField.stringValue,
+                                         in: Configuration.maxFortuneLinesRange) else {
+            showValidationError(
+                "Longest fortune, in lines must be a whole number from "
+                    + "\(Configuration.maxFortuneLinesRange.lowerBound) to "
+                    + "\(Configuration.maxFortuneLinesRange.upperBound), or 0 for no limit.",
+                field: maxLinesField)
+            return
+        }
+        candidate.maxFortuneLines = maxLines
+
+        guard let fontSize = fontSizeValue(fontSizeField.stringValue) else {
+            showValidationError(
+                "Font size must be 0 to fit the screen, or a number from "
+                    + "\(Int(Configuration.pinnedFontSizeRange.lowerBound)) to "
+                    + "\(Int(Configuration.pinnedFontSizeRange.upperBound)).",
+                field: fontSizeField)
+            return
+        }
+        candidate.fontSize = fontSize
+
         let selectedTheme = themePopup.titleOfSelectedItem
-        updated.theme = selectedTheme == customColoursTitle ? nil : selectedTheme
-        updated.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
-        updated.adaptiveWrap = adaptiveWrapBox.state == .on
-        updated.randomCow = randomCowBox.state == .on
-        updated.reposition = repositionBox.state == .on
-        updated.sizeVariation = sizeVariationBox.state == .on
+        candidate.theme = selectedTheme == customColoursTitle ? nil : selectedTheme
+        candidate.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
+        candidate.adaptiveWrap = adaptiveWrapBox.state == .on
+        candidate.randomCow = randomCowBox.state == .on
+        candidate.reposition = repositionBox.state == .on
+        candidate.sizeVariation = sizeVariationBox.state == .on
             ? (loadedSizeVariation > 0 ? loadedSizeVariation : defaultSizeVariation)
             : 0
-        updated.transition = transitionBox.state == .on ? "fade" : "none"
-        updated.cowfiles = selectedCowfiles()
+        candidate.transition = transitionBox.state == .on ? "fade" : "none"
+        candidate.cowfiles = selectedCowfiles()
 
-        configuration = updated
-        onSave(updated)
-        close()
+        switch persister(candidate) {
+        case .saved:
+            configuration = candidate
+            clearError()
+            onSave(candidate)
+            close()
+        case .failed(let reason):
+            let path = ResourceLocations.canonicalConfigurationURL().path
+            log("could not save settings to \(path): \(reason)")
+            showSaveError("Cowsaver could not save \(path): \(reason)")
+        }
     }
 
     @objc private func checkEveryCow() { setEveryCow(.on) }
@@ -412,18 +504,84 @@ public final class ConfigurationSheet: NSObject {
         // and public privacy keeps the message readable in `log show`.
         Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
+
+    // MARK: Validation and error feedback
+
+    /// Show a message and put the invalid field in front of the person, selected and ready
+    /// to retype. Does not persist or accept anything.
+    private func showValidationError(_ message: String, field: NSTextField) {
+        errorLabel.stringValue = message
+        errorLabel.isHidden = false
+        window.makeFirstResponder(field)
+        field.selectText(nil)
+    }
+
+    /// Show a save failure. The controls are left exactly as the person typed them.
+    private func showSaveError(_ message: String) {
+        errorLabel.stringValue = message
+        errorLabel.isHidden = false
+    }
+
+    /// A later successful save, or Restore Defaults, clears a message that no longer
+    /// describes the controls.
+    private func clearError() {
+        errorLabel.stringValue = ""
+        errorLabel.isHidden = true
+    }
+
+    /// Rejects empty, non-numeric, non-finite, and fractional text instead of clamping it.
+    /// Bounds are checked on the `Double` before any conversion to `Int`, so a huge or
+    /// non-finite spelling is rejected rather than trapping the conversion: `range` is always
+    /// one of Cowsaver's small documented ranges, well inside what `Int` can represent.
+    private func wholeNumber(_ text: String, in range: ClosedRange<Int>) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let decoded = Double(trimmed), decoded.isFinite else { return nil }
+        guard decoded.rounded(.towardZero) == decoded else { return nil }
+        guard decoded >= Double(range.lowerBound), decoded <= Double(range.upperBound) else {
+            return nil
+        }
+        return Int(decoded)
+    }
+
+    /// `fontSize` is the one numeric control that keeps its decimal value: `0` is exactly
+    /// auto-fit, and every other valid value is returned unrounded so a typed or loaded
+    /// `18.5` survives unchanged.
+    private func fontSizeValue(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let decoded = Double(trimmed), decoded.isFinite else { return nil }
+        if decoded == 0 { return 0 }
+        guard decoded >= Configuration.pinnedFontSizeRange.lowerBound,
+              decoded <= Configuration.pinnedFontSizeRange.upperBound else { return nil }
+        return decoded
+    }
+
+    /// A whole value reads as a whole number; a pinned decimal such as `18.5` keeps its
+    /// fraction instead of gaining floating-point noise.
+    private func fontSizeDisplayString(_ value: Double) -> String {
+        value.rounded(.towardZero) == value ? String(Int(value)) : String(value)
+    }
 }
 
 // MARK: - Writing the config file
 
+/// What came of one save attempt. Replaces the earlier `String?` convention, where `nil`
+/// silently meant success and was easy to confuse with "no message yet".
+enum SaveOutcome: Equatable, Sendable {
+    case saved
+    /// A human-readable reason, suitable for showing next to the OK button. The sheet adds
+    /// the target path when it presents this to the person who clicked OK.
+    case failed(String)
+}
+
 extension ConfigurationSheet {
-    /// Write the settings back to `config.json`.
+    /// Write the settings back to `config.json`. The default persister; a test injects its
+    /// own to produce a deterministic failure.
     ///
-    /// `config.json` is the whole configuration, so the sheet writes it rather than a store
-    /// of its own. It writes the canonical path, which is the copy both front ends read.
+    /// `config.json` is the whole configuration, so this writes it rather than a store of its
+    /// own. It writes the canonical path, which is the copy both front ends read.
     /// `Configuration.jsonObject` centralizes the persisted schema and is covered by the
     /// configuration tests.
-    public static func persist(_ configuration: Configuration) -> String? {
+    static func writeToDisk(_ configuration: Configuration) -> SaveOutcome {
         let url = ResourceLocations.canonicalConfigurationURL()
         let directory = url.deletingLastPathComponent()
 
@@ -433,9 +591,9 @@ extension ConfigurationSheet {
             let data = try JSONSerialization.data(withJSONObject: configuration.jsonObject,
                                                   options: [.prettyPrinted, .sortedKeys])
             try data.write(to: url, options: .atomic)
-            return nil
+            return .saved
         } catch {
-            return "could not write \(url.path): \(error.localizedDescription)"
+            return .failed(error.localizedDescription)
         }
     }
 }

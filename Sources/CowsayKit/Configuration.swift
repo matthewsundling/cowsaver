@@ -153,6 +153,13 @@ public struct Configuration: Equatable, Sendable {
                    Self.pinnedFontSizeRange.upperBound)
     }
 
+    /// A directly constructed configuration can hold any `Int`; this keeps display and
+    /// content loading inside the documented 0...100 range, where 0 means unlimited.
+    public var effectiveMaxFortuneLines: Int {
+        min(max(maxFortuneLines, Self.maxFortuneLinesRange.lowerBound),
+            Self.maxFortuneLinesRange.upperBound)
+    }
+
     public var balloonMode: BalloonMode {
         balloonStyle.lowercased() == "think" ? .think : .say
     }
@@ -207,9 +214,7 @@ public struct Configuration: Equatable, Sendable {
     }
 
     public var fortuneLoadOptions: FortuneLoadOptions {
-        FortuneLoadOptions(maxLines: min(max(maxFortuneLines, Self.maxFortuneLinesRange.lowerBound),
-                                         Self.maxFortuneLinesRange.upperBound),
-                           wrapColumns: effectiveWrapWidth)
+        FortuneLoadOptions(maxLines: effectiveMaxFortuneLines, wrapColumns: effectiveWrapWidth)
     }
 }
 
