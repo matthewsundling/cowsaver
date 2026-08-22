@@ -178,6 +178,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
             }
             self.rotate()
         }
+        // The host has not attached this window as a sheet yet, so its own screen would still
+        // reflect wherever AppKit happened to construct it, not System Settings' display.
+        sheet.prepareForPresentation(on: window?.screen)
         self.sheet = sheet   // the host does not retain it for us
         return sheet.window
     }

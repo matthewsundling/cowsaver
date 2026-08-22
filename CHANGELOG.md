@@ -32,6 +32,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   fortune loader recovery events (an oversized, unreadable, or invalid file; an exhausted limit)
   are now surfaced through one consistently logged sequence on every engine creation, Options
   save, and activation-time reload, not only the first.
+- The settings window now sizes itself for the display it is actually presented on, rather than
+  the main display, and reapplies its height cap after that display changes.
 
 ## [1.0] - 2026-08-15
 

@@ -51,6 +51,21 @@ public final class ConfigurationSheet: NSObject {
     /// What checking the box means when the file names no amount of its own.
     private let defaultSizeVariation = 0.3
 
+    // MARK: Presentation sizing
+
+    /// The height the controls actually need, recorded once when this window is built. Every
+    /// later cap is measured against this, never against whatever height the window already
+    /// has, so a taller display can restore it exactly and a shorter one always shrinks from
+    /// the same baseline.
+    private var naturalContentHeight: CGFloat = 0
+
+    /// The screen a front end intends to present this window on, offered before it has an
+    /// attached sheet parent or is itself visible. Once either of those exists it is the more
+    /// authoritative source and this hint no longer matters, but it is kept rather than
+    /// cleared: nothing depends on it being forgotten, and a `nil` parent/visible-window pair
+    /// after presentation should fall back to it rather than to no cap at all.
+    private var presentationScreenHint: NSScreen?
+
     public convenience init(configuration: Configuration,
                             onSave: @escaping (Configuration) -> Void) {
         self.init(configuration: configuration,
@@ -62,9 +77,13 @@ public final class ConfigurationSheet: NSObject {
     /// height cap so a test can describe a screen this machine does not have, and the
     /// persister so a test can produce a deterministic write failure without touching a real
     /// user configuration or depending on file permissions.
+    ///
+    /// `maximumContentHeight` defaults to nil: construction never consults a screen, so the
+    /// natural height it produces is the same regardless of which display eventually presents
+    /// it. A front end supplies the real cap afterward, through `prepareForPresentation(on:)`.
     init(configuration: Configuration,
          cowfileNames: [String],
-         maximumContentHeight: CGFloat? = ConfigurationSheet.availableContentHeight(),
+         maximumContentHeight: CGFloat? = nil,
          persister: @escaping (Configuration) -> SaveOutcome = ConfigurationSheet.writeToDisk,
          onSave: @escaping (Configuration) -> Void) {
         self.configuration = configuration
@@ -72,19 +91,6 @@ public final class ConfigurationSheet: NSObject {
         self.onSave = onSave
         super.init()
         buildWindow(cowfileNames: cowfileNames, maximumContentHeight: maximumContentHeight)
-    }
-
-    /// The tallest this window's content may be, or nil where there is no screen to ask.
-    ///
-    /// The saver's host presents this window as a sheet on the System Settings window, so
-    /// the room it has is the visible frame less that window's own title bar and the inset a
-    /// sheet keeps from the top of its parent. The margin is deliberately generous: a sheet
-    /// whose buttons sit past the bottom of the screen cannot be dismissed (issue #16),
-    /// while one that starts scrolling a little sooner than it strictly must costs nothing.
-    /// On any display with room for the natural height, this changes nothing.
-    static func availableContentHeight() -> CGFloat? {
-        guard let visible = NSScreen.main?.visibleFrame else { return nil }
-        return visible.height - 120
     }
 
     /// The bundled cow names, read from whichever bundle carries this class: the `.saver`
@@ -220,16 +226,64 @@ public final class ConfigurationSheet: NSObject {
                                                 constant: -buttonMargin),
         ])
         window.contentView = content
+        self.window = window
+        window.delegate = self
         apply(configuration)
         // Size from the arranged controls so adding a row expands the sheet automatically,
-        // and cap that at the room the screen has: the same height as before wherever it
-        // fits, and a scrolling document rather than unreachable buttons where it does not.
+        // and retain that as the natural height: a taller display can always return to it,
+        // and a shorter one only ever caps it, never redefines it. A scrolling document,
+        // not unreachable buttons, is what a cap shorter than this produces.
         content.layoutSubtreeIfNeeded()
-        let natural = stack.fittingSize.height + bottomStack.fittingSize.height
+        naturalContentHeight = stack.fittingSize.height + bottomStack.fittingSize.height
             + buttonGap + buttonMargin
-        window.setContentSize(NSSize(width: width,
-                                     height: min(natural, maximumContentHeight ?? natural)))
-        self.window = window
+        applyContentHeight(maximum: maximumContentHeight)
+    }
+
+    /// Prepares this window for presentation on `screen`, the front end's best guess at where
+    /// it is about to appear. Call this exactly once, before the window is shown or handed to
+    /// a host: `screen` only wins the sizing decision until an attached sheet parent or the
+    /// window's own visibility supplies a more authoritative one (`applyHeightPolicy`), at
+    /// which point becoming key or changing screens keeps the cap current on its own.
+    public func prepareForPresentation(on screen: NSScreen?) {
+        presentationScreenHint = screen
+        applyHeightPolicy()
+    }
+
+    /// The room kept clear below the selected screen's visible frame, so a sheet's own lowest
+    /// button never sits past the bottom of the display (issue #16).
+    private static let screenAllowance: CGFloat = 120
+
+    /// Parent wins once attached: `sheetParent` exists only after the host has actually begun
+    /// the sheet relationship, and by then it names the real display in use. Before or without
+    /// that, the window's own screen wins once the window is actually visible — an off-screen,
+    /// not-yet-shown window's `screen` reflects where AppKit happened to place it at
+    /// construction, not where a front end intends to present it. Before visibility, the
+    /// initial hint is the best information a front end can offer; with none of the three,
+    /// there is no cap at all.
+    static func selectedMaximumContentHeight(parentVisibleHeight: CGFloat?,
+                                              visibleWindowHeight: CGFloat?,
+                                              hintVisibleHeight: CGFloat?) -> CGFloat? {
+        let visible = parentVisibleHeight ?? visibleWindowHeight ?? hintVisibleHeight
+        return visible.map { $0 - screenAllowance }
+    }
+
+    /// Reads every current candidate screen fresh — never a cached rectangle or height — and
+    /// applies the resulting cap.
+    private func applyHeightPolicy() {
+        let maximum = Self.selectedMaximumContentHeight(
+            parentVisibleHeight: window.sheetParent?.screen?.visibleFrame.height,
+            visibleWindowHeight: window.isVisible ? window.screen?.visibleFrame.height : nil,
+            hintVisibleHeight: presentationScreenHint?.visibleFrame.height)
+        applyContentHeight(maximum: maximum)
+    }
+
+    /// Resizes to the lesser of the retained natural height and `maximum`, or back to the
+    /// natural height when `maximum` is nil. Always measured from `naturalContentHeight`,
+    /// never from the window's current (possibly already-reduced) height, so recapping is
+    /// reversible in both directions rather than a one-way shrink.
+    func applyContentHeight(maximum: CGFloat?) {
+        let height = min(naturalContentHeight, maximum ?? naturalContentHeight)
+        window.setContentSize(NSSize(width: window.frame.width, height: height))
     }
 
     /// The gap above the button row, and the margin below it.
@@ -559,6 +613,25 @@ public final class ConfigurationSheet: NSObject {
     /// fraction instead of gaining floating-point noise.
     private func fontSizeDisplayString(_ value: Double) -> String {
         value.rounded(.towardZero) == value ? String(Int(value)) : String(value)
+    }
+}
+
+// MARK: - Recapping on the window's own lifecycle
+
+extension ConfigurationSheet: NSWindowDelegate {
+    /// `sheetParent` exists only once the host has actually begun the sheet relationship,
+    /// which happens after `configureSheet` has already returned; becoming key is the first
+    /// moment that relationship is reliably in place, and it is also when the standalone
+    /// window first has a real screen of its own.
+    public func windowDidBecomeKey(_ notification: Notification) {
+        applyHeightPolicy()
+    }
+
+    /// Moving to a shorter display must shrink the window; moving to a taller one must
+    /// restore its natural height. Reapplying the same cap the window already has is
+    /// harmless, so no attempt is made to detect or skip a same-size change.
+    public func windowDidChangeScreen(_ notification: Notification) {
+        applyHeightPolicy()
     }
 }
 
