@@ -13,13 +13,13 @@ import os.log
 ///
 /// Its rendering behavior follows the low-activity design in `docs/power.md`:
 ///
-/// - **Rule 3, no GPU frameworks.** A `CATextLayer` is an AppKit/Core Animation layer, not
+/// - **No GPU frameworks.** A `CATextLayer` is an AppKit/Core Animation layer, not
 ///   an application-managed GPU renderer. `make check` rejects imports of the excluded
 ///   frameworks so the rendering surface remains small and inspectable.
-/// - **Rule 4, transitions are brief.** The crossfade is a single `CABasicAnimation` on
+/// - **Brief transitions.** The crossfade is a single `CABasicAnimation` on
 ///   `opacity`, ~0.6s, once per rotation. Nothing animates position, and nothing animates
 ///   continuously.
-/// - **Rule 5, reposition rather than drift.** Each rotation places the block at a new
+/// - **Discrete repositioning.** Each rotation places the block at a new
 ///   random point inside a safe inset, and `sizeVariation` draws it at a new size. Both are
 ///   one discrete step per rotation rather than anything that animates.
 public final class CowsaverContentView: NSView {

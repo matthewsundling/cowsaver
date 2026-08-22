@@ -90,7 +90,7 @@ struct ImageRenderTests {
         #expect(a == b)
     }
 
-    /// Repositioning must actually move the block, or Rule 5 is not implemented.
+    /// Repositioning must move the block so rotations remain discrete rather than drifting.
     @Test func repositioningChangesPlacement() throws {
         var configuration = Configuration()
         configuration.reposition = true

@@ -108,12 +108,11 @@ Other common cases:
 - **The screensaver runs but the layout looks wrong.** Set `"debugFrame": true` in
   `config.json` and take a screenshot: a red border marks the view bounds and a blue border
   the text layer, which separates a host-geometry problem from a layout problem.
-- **You are on macOS 26 Tahoe.** Cowsaver builds and installs there, and both failures
-  behind that caveat are now diagnosed and defended against — content is fitted to the
-  hosting window rather than the resized view, and the settings sheet caps its height — but
-  no Tahoe machine has verified either fix yet. If clicking Options produces nothing at all,
-  relaunching System Settings clears it; `Cowsaver.app --configure` opens the same settings
-  window whether or not it does. See `docs/compatibility.md`.
+- **You are on macOS 26 Tahoe.** Cowsaver's observed host-geometry and settings-sheet failures
+  are diagnosed and have application-side defenses, but those defenses still need direct Tahoe
+  verification. Tahoe is not supported. If clicking Options produces nothing at all, relaunching
+  System Settings clears it; `Cowsaver.app --configure` opens the same settings window whether or
+  not it does. See `docs/compatibility.md`.
 
 If a problem survives all of that, open an issue and include the `make doctor` output.
 
@@ -133,7 +132,7 @@ A Command Line Tools installation that does not bundle Swift Testing cannot run 
 it fails with `no such module 'Testing'`. `make test` recognizes that failure and says so
 rather than leaving you with the raw compiler error. `make smoke` is the framework-free
 alternative: it verifies the same cowsay 3.8.4 compatibility fixtures without the test
-framework, and it is enough to confirm a build renders correctly.
+framework. It does not verify AppKit layout, bundle loading, configuration, or screen presentation.
 
 Regenerating those fixtures with `make golden` additionally requires cowsay 3.8.4
 (`brew install cowsay`), and is only needed when cowsay compatibility behavior changes

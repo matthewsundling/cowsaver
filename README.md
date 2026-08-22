@@ -37,7 +37,7 @@ Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundli
 - **Cowsaver.app** — a standalone development and fallback app. It is not a lock-screen screensaver.
 - **Low idle activity** — Cowsaver renders when its content rotates rather than running a continuous animation loop.
 
-Built with a macOS 13.0 deployment target. Verified on macOS Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9. macOS 26 Tahoe 26.4.1 was tested on Apple silicon but is not currently supported: the Options sheet does not open and timer-based activation can clip content. See [compatibility notes](docs/compatibility.md).
+Built with a macOS 13.0 deployment target. Verified on macOS Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9. macOS 26 Tahoe has been diagnosed and has application-side defenses, but they are pending direct verification; Tahoe is not supported. See [compatibility notes](docs/compatibility.md).
 
 ## Install
 
@@ -198,6 +198,7 @@ Regenerating the committed golden output requires cowsay 3.8.4 (`brew install co
 | [Configuration](docs/configuration.md)                       | Every configuration key, its default, and its error behavior. |
 | [Power notes](docs/power.md)                                 | The low-activity design, measurement context, and limitations. |
 | [Compatibility](docs/compatibility.md)                       | macOS versions tested so far and known platform behavior.    |
+| [Releasing](docs/releasing.md)                               | Maintainer procedure for preparing, publishing, and verifying a release. |
 | [Platform risks](docs/platform-risk.md)                      | The Apple APIs Cowsaver relies on and its fallback paths.    |
 | [Credits](credits.md)                                        | Attribution and licensing for the code, cowfiles, and fortune material. |
 | [Contributing](CONTRIBUTING.md)                              | Development rules and contribution guidance.                 |

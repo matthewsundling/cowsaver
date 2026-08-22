@@ -6,8 +6,8 @@ Cowsaver keeps its cowsay-compatible core independent of macOS so that rendering
 Sources/
   CowsayKit/       Foundation-only parsing, selection, configuration, and rendering
   CowsayCLI/       cowsaver-cli command-line front end
-  CowsaverRender/  AppKit rendering shared by the app and screensaver
-  CowsaverSaver/   ScreenSaverView shell and Options sheet
+  CowsaverRender/  AppKit rendering and shared settings sheet
+  CowsaverSaver/   ScreenSaverView shell
   CowsaverAppSupport/  app-only idle monitoring support
   CowsaverApp/     standalone AppKit front end
 ```
@@ -16,7 +16,7 @@ Sources/
 
 ### `CowsayKit`
 
-`CowsayKit` parses static cowfiles, wraps messages, builds balloons, selects fortunes and cowfiles, reads configuration, and produces the next text block. It imports Foundation only, so `swift test` can exercise these behaviors without a screensaver host.
+`CowsayKit` parses static cowfiles, wraps messages, builds balloons, selects fortunes and cowfiles, reads configuration, locates resources, and produces the next text block. It imports Foundation only, so `swift test` can exercise these behaviors without a screensaver host.
 
 The core keeps byte-level text handling because cowsay counts bytes rather than Unicode characters. It also contains SHA-256 because CryptoKit would make the core Apple-specific. `make check` rejects platform-framework imports in this target.
 
@@ -24,11 +24,11 @@ The core keeps byte-level text handling because cowsay counts bytes rather than 
 
 ### `CowsaverRender`
 
-`CowsaverRender` resolves themes, calculates layout and auto-fit, hosts the `CATextLayer`, coordinates content rotation, and locates resources. Both front ends use it, so layout and rendering behavior have one implementation. It is a SwiftPM target so the layout and rotation coordinator are covered by tests.
+`CowsaverRender` resolves themes, calculates layout and auto-fit, hosts the `CATextLayer`, coordinates content rotation, and provides `ConfigurationSheet`. Both front ends use its rendering and settings sheet, so those behaviors have one implementation. It is a SwiftPM target so the layout and rotation coordinator are covered by tests.
 
 ### `CowsaverSaver`
 
-`CowsaverSaver` contains the `ScreenSaverView` subclass and the Options sheet. It is built by the Makefile because SwiftPM has no product type for a loadable screensaver bundle. The legacy ScreenSaver API is contained here; configuration is represented by the shared `Configuration` type.
+`CowsaverSaver` contains the `ScreenSaverView` shell that presents the shared settings sheet. It is built by the Makefile because SwiftPM has no product type for a loadable screensaver bundle. The legacy ScreenSaver API is contained here; configuration is represented by the shared `Configuration` type.
 
 ### `CowsaverAppSupport`
 
@@ -40,7 +40,7 @@ The core keeps byte-level text handling because cowsay counts bytes rather than 
 
 ## Build system
 
-`Package.swift` defines the core, command-line tool, app, app-only support, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Saver and app module objects, Swift modules, and module caches live in separate product-specific intermediate directories, so their builds can clean and compile concurrently. Xcode Command Line Tools are sufficient to build the products. The test suite also requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
+`Package.swift` defines the core, command-line tool, app, app-only support, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Saver and app module objects, Swift modules, and module caches live in separate product-specific intermediate directories, so their builds can clean and compile concurrently. Xcode Command Line Tools are sufficient to build the products. The full test suite additionally requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 
 The screensaver and app link their modules statically. The app also links its app-only support module. This avoids a runtime dynamic-library lookup from a bundle loaded by the sandboxed screensaver host.
 

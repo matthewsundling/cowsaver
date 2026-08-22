@@ -4,14 +4,23 @@ Patches are welcome. This guide explains the project constraints contributors sh
 
 ## Build and test
 
-Xcode Command Line Tools are sufficient; the project does not require the full Xcode app or an Xcode project file.
+Xcode Command Line Tools are sufficient to build both products; the project does not require the
+full Xcode app or an Xcode project file. The full test suite is separate: `swift test` requires a
+toolchain that supplies Swift Testing.
 
 ```sh
-make check   # source-boundary checks
-make test    # swift test, including 219 golden files
-make         # builds Cowsaver.saver and Cowsaver.app
-make doctor  # build environment and installed-saver metadata
+make check             # source-boundary checks
+make test              # full Swift Testing suite, including the golden fixtures
+make smoke             # framework-free byte comparison of the 219 golden fixtures
+make test-diagnostics  # tests the host-log diagnostic tools
+make                   # builds Cowsaver.saver and Cowsaver.app
+make doctor            # build environment and installed-saver metadata
 ```
+
+`make check` proves the maintained source boundaries. `make test` exercises the Swift test suite;
+if its toolchain lacks Swift Testing, it explains that limitation. `make smoke` runs only the 219
+cowsay-byte fixtures through `cowsaver-cli`; it does not exercise AppKit layout, bundle loading,
+configuration, or screen presentation. `make test-diagnostics` checks the diagnostic scripts.
 
 ## Project constraints
 
