@@ -1,7 +1,7 @@
 import AppKit
 import CowsayKit
 
-/// Resolved colours and a font, ready to hand to a layer.
+/// Resolved colors and a font, ready to hand to a layer.
 ///
 /// The parsing and the presets live in `CowsayKit` (`ThemeColor`, `ThemePreset`) so they can
 /// be tested without a window server. This file is only the AppKit conversion.
@@ -34,8 +34,8 @@ public struct Theme {
 }
 
 public extension NSColor {
-    convenience init(_ colour: ThemeColor) {
-        self.init(srgbRed: colour.red, green: colour.green, blue: colour.blue, alpha: 1)
+    convenience init(_ color: ThemeColor) {
+        self.init(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1)
     }
 }
 

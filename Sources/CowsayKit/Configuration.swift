@@ -1,7 +1,7 @@
 import CoreFoundation
 import Foundation
 
-/// A colour, kept here rather than in the AppKit layer.
+/// A color, kept here rather than in the AppKit layer.
 ///
 /// This lets it be parsed and tested without a window server.
 public struct ThemeColor: Equatable, Sendable {
@@ -14,7 +14,7 @@ public struct ThemeColor: Equatable, Sendable {
     }
 
     /// Accepts `#RGB`, `#RRGGBB`, with or without the `#`. Returns nil rather than
-    /// throwing: a bad colour in a config file must degrade to the default, not take the
+    /// throwing: a bad color in a config file must degrade to the default, not take the
     /// screensaver down.
     public init?(hex: String) {
         var text = hex
@@ -45,7 +45,7 @@ public struct ThemeColor: Equatable, Sendable {
     }
 }
 
-/// A named foreground and background colour scheme.
+/// A named foreground and background color scheme.
 public struct ThemePreset: Sendable {
     public let name: String
     public let foreground: String
@@ -85,10 +85,10 @@ public struct Configuration: Equatable, Sendable {
     public var sizeVariation: Double = 0
     public var foreground: String = "#33FF66"
     public var background: String = "#000000"
-    /// A named preset, which supplies both colours. Cowsaver ships on `green-phosphor`, so
-    /// restoring defaults lands on a named theme rather than on a pair of loose colours. A
+    /// A named preset, which supplies both colors. Cowsaver ships on `green-phosphor`, so
+    /// restoring defaults lands on a named theme rather than on a pair of loose colors. A
     /// file that sets `foreground` or `background` without naming a theme clears this, so
-    /// colours written by hand still win.
+    /// colors written by hand still win.
     public var theme: String? = "green-phosphor"
     public var transition: String = "fade"
     public var reposition: Bool = true
@@ -169,16 +169,16 @@ public struct Configuration: Equatable, Sendable {
     }
 
     /// A named theme wins over raw hex values, so `"theme": "amber"` does what it looks
-    /// like without also having to edit two colours.
+    /// like without also having to edit two colors.
     public var resolvedForeground: ThemeColor {
         if let preset = theme.flatMap(ThemePreset.named),
-           let colour = ThemeColor(hex: preset.foreground) { return colour }
+           let color = ThemeColor(hex: preset.foreground) { return color }
         return ThemeColor(hex: foreground) ?? ThemeColor(red: 0.2, green: 1.0, blue: 0.4)
     }
 
     public var resolvedBackground: ThemeColor {
         if let preset = theme.flatMap(ThemePreset.named),
-           let colour = ThemeColor(hex: preset.background) { return colour }
+           let color = ThemeColor(hex: preset.background) { return color }
         return ThemeColor(hex: background) ?? ThemeColor(red: 0, green: 0, blue: 0)
     }
 
@@ -424,11 +424,11 @@ public extension Configuration {
         func color(_ key: String, default defaultValue: String) -> String? {
             guard let raw = object[key] else { return nil }
             guard let value = raw as? String else {
-                warnings.append("\(key): expected a hexadecimal colour string; using \(defaultValue)")
+                warnings.append("\(key): expected a hexadecimal color string; using \(defaultValue)")
                 return defaultValue
             }
             guard ThemeColor(hex: value) != nil else {
-                warnings.append("\(key): invalid hexadecimal colour '\(value)'; using \(defaultValue)")
+                warnings.append("\(key): invalid hexadecimal color '\(value)'; using \(defaultValue)")
                 return defaultValue
             }
             return value
@@ -498,8 +498,8 @@ public extension Configuration {
         if let value = boolean("weightByFile") { configuration.weightByFile = value }
         if let value = boolean("debugFrame") { configuration.debugFrame = value }
 
-        // Colours in the file beat the default preset, which would otherwise override every
-        // hand-written colour. Naming a theme is how a file asks for a preset instead.
+        // Colors in the file beat the default preset, which would otherwise override every
+        // hand-written color. Naming a theme is how a file asks for a preset instead.
         if object["theme"] == nil,
            object["foreground"] != nil || object["background"] != nil {
             configuration.theme = nil

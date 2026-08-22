@@ -179,7 +179,7 @@ struct ThemeTests {
         #expect(font.pointSize == 18)
     }
 
-    @Test func appliesThemePresetColours() {
+    @Test func appliesThemePresetColors() {
         var configuration = Configuration()
         configuration.theme = "amber"
         let theme = Theme(configuration: configuration)
