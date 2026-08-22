@@ -43,6 +43,8 @@ out badly. Set it back to `false` when the pass is over.
 | Idle timer | Set 1 min; wait | Activates; no clipping |
 | Lock screen return | Wake from the saver with a password required | The unlock prompt is normal |
 | Multi-display | If available: both screens | Each screen fits independently, with different fortunes |
+| App fullscreen dismissal | Launch `Cowsaver.app --fullscreen` separately for each: press a key, click each mouse button, move the mouse, scroll | Every input dismisses it and the app quits |
+| App display reconciliation | With `Cowsaver.app --fullscreen` or `--idle` visible, if the hardware permits: change the display arrangement or mode, or connect/disconnect a display | Every current screen is covered afterward and no stale window remains |
 | Config resilience | Point at a deliberately broken `config.json` | The saver runs on defaults; `cowsaver-cli --validate-config` names every problem, including any misspelled key |
 
 ## Recording a run

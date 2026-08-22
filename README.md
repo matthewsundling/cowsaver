@@ -97,6 +97,8 @@ make app
 
 `--idle 300` waits for five minutes of idleness before showing Cowsaver. It checks idle state every five seconds and normally avoids activation while macOS reports a display-sleep assertion, such as while a film is playing.
 
+While `--fullscreen` or `--idle` is showing, any keyboard or mouse activity — a key, a click, moving the mouse, or scrolling — dismisses it. It also follows the currently attached displays: connecting, disconnecting, or rearranging displays while it is visible keeps every current screen covered.
+
 **The standalone app is not a screensaver.** It does not integrate with screen lock and does not appear on the lock screen. The `.saver` remains the installed screensaver; the app is a useful fallback for manual fullscreen display or development.
 
 ## Why

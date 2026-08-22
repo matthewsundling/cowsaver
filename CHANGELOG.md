@@ -34,6 +34,11 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   save, and activation-time reload, not only the first.
 - The settings window now sizes itself for the display it is actually presented on, rather than
   the main display, and reapplies its height cap after that display changes.
+- Standalone `--fullscreen` and `--idle` presentation windows can now actually become key, so
+  keyboard, mouse-button, mouse-movement, and scroll input all reliably dismiss them. While
+  visible, connecting, disconnecting, or rearranging displays now keeps every current screen
+  covered — an added display shows a fortune immediately, a removed one leaves no stale window,
+  and a retained one keeps its current fortune rather than picking a new one.
 
 ## [1.0] - 2026-08-15
 
