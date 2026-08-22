@@ -93,8 +93,8 @@ func makeEngine(_ configuration: Configuration, seed: UInt64) -> CowsaverEngine 
         fortuneDirectories: ResourceLocations.fortuneDirectories(bundle: bundle),
         seed: seed
     )
-    for note in engine.diagnostics.notes {
-        FileHandle.standardError.write(Data("cowsaver: \(note)\n".utf8))
+    for message in engine.diagnostics.messages {
+        FileHandle.standardError.write(Data("cowsaver: \(message)\n".utf8))
     }
     return engine
 }

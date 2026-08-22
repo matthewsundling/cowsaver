@@ -151,7 +151,18 @@ The bundled curated collection remains the default. You can also import fortune 
 
 The script copies fortune files to `fortune-user/` inside Cowsaver’s application-support directory. Imported fortunes are added to the bundled curated collection; they do not replace it. Use `--dry-run` first to see what it would import. Stop and start the screensaver after an import so it creates a new content engine.
 
-Personal fortune files are UTF-8 plain-text files with no filename extension. Separate records with a line containing only `%`; `.dat` and `.u8` index files are ignored. Files whose names end in `-o`, or which are inside an `off/` directory, are skipped under fortune-mod’s legacy convention for separately distributed content. Cowsaver does not curate or classify personal imports: apart from technical display filters, they are used as supplied.
+Personal fortune files are UTF-8 plain-text files with no filename extension. Separate records with a line containing only `%`; `.dat` and `.u8` index files are ignored. Files whose names end in `-o`, or which sit inside a directory whose name is exactly `off` (a directory merely containing those letters, such as `handoff`, does not count), are skipped under fortune-mod’s legacy convention for separately distributed content. Cowsaver does not curate or classify personal imports: apart from technical display filters, they are used as supplied.
+
+Loading your own collection is bounded, so an oversized or unusually large import cannot stall the screensaver or grow its memory without limit:
+
+| Limit | Value | Plain-language result |
+|---|---|---|
+| One fortune data file, or one `excluded.txt` list | 8 MiB | A larger file is skipped; the rest of your collection still loads. |
+| Total fortune and exclusion data accepted per load | 32 MiB | Loading stops at this boundary; later files are not decoded. |
+| Retained fortune records per load | 100,000 | Once this many records are kept, later records are not retained. |
+| Filesystem entries examined per load | 1,000 | Every file, directory, and symbolic link looked at counts, not just usable fortunes; once this many have been examined, the rest of a large tree is left unscanned. |
+
+These are fixed package limits, not settings — they do not appear in the Options window or `config.json`. A symbolic link, whether it stands in for a search root, a directory, or a file, is never followed. When a limit changes what actually loaded, the screensaver logs a short note explaining which one and what it means for your content; it never logs a fortune’s own text.
 
 ## Building
 

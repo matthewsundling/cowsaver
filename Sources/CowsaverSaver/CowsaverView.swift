@@ -44,17 +44,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         configuration = resolved.configuration
         for warning in resolved.warnings { log(warning) }
 
-        let bundle = Bundle(for: CowsaverView.self)
-        let seed = UInt64(bitPattern: Int64(ObjectIdentifier(self).hashValue))
-        let engine = CowsaverEngine(
-            configuration: configuration,
-            cowDirectories: ResourceLocations.cowDirectories(bundle: bundle),
-            fortuneDirectories: ResourceLocations.fortuneDirectories(bundle: bundle),
-            seed: seed
-        )
-        for note in engine.diagnostics.notes { log(note) }
-        self.engine = engine
+        self.engine = buildEngineAndLogDiagnostics()
 
+        let seed = UInt64(bitPattern: Int64(ObjectIdentifier(self).hashValue))
         let content = CowsaverContentView(frame: bounds, configuration: configuration, seed: seed)
         content.autoresizingMask = [.width, .height]
         addSubview(content)
@@ -192,14 +184,23 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     /// Settings that change which content is loaded need a new engine, not just a redraw.
     private func rebuildEngine() {
+        engine = buildEngineAndLogDiagnostics()
+    }
+
+    /// The one path every engine-creating call site uses, so initial construction, an
+    /// Options-triggered rebuild, and an activation-time configuration reload all surface
+    /// the same authoritative diagnostic sequence rather than each logging its own subset.
+    private func buildEngineAndLogDiagnostics() -> CowsaverEngine {
         let bundle = Bundle(for: CowsaverView.self)
         let seed = UInt64(bitPattern: Int64(ObjectIdentifier(self).hashValue))
-        engine = CowsaverEngine(
+        let engine = CowsaverEngine(
             configuration: configuration,
             cowDirectories: ResourceLocations.cowDirectories(bundle: bundle),
             fortuneDirectories: ResourceLocations.fortuneDirectories(bundle: bundle),
             seed: seed
         )
+        for message in engine.diagnostics.messages { log(message) }
+        return engine
     }
 
     // MARK: Configuration

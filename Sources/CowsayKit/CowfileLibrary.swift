@@ -54,12 +54,24 @@ public struct CowfileLibrary: Sendable {
                 do {
                     cows[name] = try CowfileParser.parse(name: name, contents: ByteString(data))
                 } catch let error as CowfileParseError {
-                    failures.append(.init(name: name, path: path.path, reason: error.description))
+                    failures.append(.init(name: name, path: path.path,
+                                          reason: diagnosticReason(for: error)))
                 } catch {
                     failures.append(.init(name: name, path: path.path, reason: "\(error)"))
                 }
             }
         }
         return CowfileLibrary(cows: cows, failures: failures)
+    }
+
+    /// `CowfileParseError.description` quotes the offending source line, which is useful
+    /// for the CLI's explicit `-f` path where a user is actively debugging their own file.
+    /// A shared diagnostic surfaced by the app or screensaver must not echo personal
+    /// cowfile source back, so this reports only the error kind for `.unsupportedPerl`.
+    private static func diagnosticReason(for error: CowfileParseError) -> String {
+        if case .unsupportedPerl = error {
+            return "contains Perl this parser does not implement"
+        }
+        return error.description
     }
 }
