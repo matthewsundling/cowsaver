@@ -25,6 +25,10 @@ macOS 26 Tahoe has been tested on Apple silicon, and the failures recorded above
 
 On the tested Sequoia releases, Screen Saver is reached from System Settings → Wallpaper. It is no longer a separate settings pane.
 
+## Host-log diagnosis
+
+Use `scripts/watch-host-logs.sh` while reproducing a problem to see filtered Cowsaver and settings-sheet activity live. Use `scripts/capture-host-logs.sh` after reproducing a problem when a timestamped diagnostic set is more useful. Review every file before sharing: the normal review and transfer set is `doctor.txt`, `sw_vers.txt`, `cowsaver.log`, and `sheet.log`. `host-full.log` contains broad screensaver-host and System Settings history; do not share it unless a maintainer specifically requests it, and only after reviewing and redacting it as needed. Filtered logs can still contain personal paths or context.
+
 ## If the screensaver breaks after a macOS update
 
 1. Run `make doctor` and include its output in a report; it identifies the environment that built the installed saver.

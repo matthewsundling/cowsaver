@@ -44,7 +44,7 @@ IOKIT_BOUNDARY_DIRS := $(SOURCES_DIR)/CowsaverRender $(SOURCES_DIR)/CowsaverSave
 
 IMPORT_RE       := ^[[:space:]]*(@_exported[[:space:]]+)?import[[:space:]]+
 
-.PHONY: all saver app cli test smoke check golden import-fortunes install uninstall doctor clean
+.PHONY: all saver app cli test smoke test-diagnostics check golden import-fortunes install uninstall doctor clean
 
 all: saver app
 
@@ -136,7 +136,11 @@ doctor:
 	@echo "running arch:    $$(uname -m)"
 	@echo "CLT version:     $(BUILD_CLT)"
 	@echo "swiftc:          $(BUILD_SWIFT)"
-	@echo "cowsay:          $$(cowsay --version 2>&1 | head -1 || echo 'not installed')"
+	@if command -v cowsay >/dev/null 2>&1; then \
+		echo "cowsay:          $$(cowsay --version 2>&1 | head -1)"; \
+	else \
+		echo "cowsay:          not installed"; \
+	fi
 	@if [ -d "$(INSTALL_DIR)/$(SAVER)" ]; then \
 		echo "installed saver: $(INSTALL_DIR)/$(SAVER)"; \
 		for k in CowsaverBuildOSVersion CowsaverBuildCLTVersion CowsaverSwiftVersion CowsaverGitCommit CFBundleShortVersionString LSMinimumSystemVersion; do \
@@ -172,6 +176,9 @@ test: check
 
 smoke: cli
 	scripts/run-goldens.sh "$(BIN)"
+
+test-diagnostics:
+	bash scripts/test-diagnostic-tools.sh
 
 # Architectural checks run before every build.
 check:

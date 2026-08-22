@@ -11,6 +11,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- `make doctor` now reports a missing `cowsay` deliberately, and host-log tools provide
+  privacy-aware guidance for reviewing and sharing diagnostic output.
 - Idle monitoring now lives in app-only support, removing the saver's direct IOKit framework
   dependency, and parallel saver and app builds use separate intermediates.
 - Fortune selection now gives files equal probability when `weightByFile` is enabled and applies

@@ -37,9 +37,13 @@ paste here
        ./build/Cowsaver.app/Contents/MacOS/Cowsaver --window
      If the app renders and the screensaver does not, that narrows it a great deal. -->
 
-## Anything in Console.app?
+## Optional diagnostic logs
 
-<!-- Cowsaver logs with the prefix [Cowsaver]. Filter on that. -->
+<!--
+See docs/compatibility.md#host-log-diagnosis for the live watcher and after-the-fact capture.
+Review every diagnostic file before sharing. Do not attach host-full.log by default, and do not
+put unreviewed diagnostic data in a public issue.
+-->
 
 ---
 

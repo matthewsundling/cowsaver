@@ -15,8 +15,10 @@ PREDICATE='process == "legacyScreenSaver" OR process == "System Settings" OR sub
 # NSLog from the appex lands at debug level in the unified log; without
 # `--level debug` neither `log stream` nor `log show` returns a single line.
 if [[ "${1:-}" == "--all" ]]; then
+    echo "WARNING: --all displays broad screensaver-host and System Settings activity. Do not copy or share it without review and redaction." >&2
     exec log stream --level debug --style compact --predicate "$PREDICATE"
 fi
 
+echo "Filtered lines may still contain personal paths or context; review copied output before sharing." >&2
 log stream --level debug --style compact --predicate "$PREDICATE" \
     | grep -iE --line-buffered 'cowsaver|configure|sheet'
