@@ -6,43 +6,53 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Added
 
+- An app-hosted settings window shared with the screensaver's Options sheet, including Restore
+  Defaults, cowfile selection, and direct access through `Cowsaver.app --configure`.
+- `sizeVariation`, which varies the fitted text size by rotation within its configured range.
+- Configuration validation through `cowsaver-cli --validate-config`, default output through
+  `cowsaver-cli --print-default-config`, and warnings for unknown configuration keys.
+- Lifecycle logging, an optional debug frame, and host-log capture and live-watch tools for
+  diagnosing screensaver-host behavior without recording fortune text.
+- A framework-free smoke runner that compares all 219 cowsay 3.8.4 golden fixtures byte for byte.
 - Screenshots of the green-phosphor, amber, and paperwhite themes in the README.
 - Public issue and pull-request templates, a Code of Conduct, and a security-reporting policy.
 
 ### Changed
 
-- `make doctor` now reports a missing `cowsay` deliberately, and host-log tools provide
-  privacy-aware guidance for reviewing and sharing diagnostic output.
+- `make doctor` now reports a missing `cowsay` deliberately and identifies the installed saver's
+  build environment, configuration search order, and configuration warnings.
 - Idle monitoring now lives in app-only support, removing the saver's direct IOKit framework
   dependency, and parallel saver and app builds use separate intermediates.
-- Fortune selection now gives files equal probability when `weightByFile` is enabled and applies
-  no-repeat history without biasing the remaining eligible records.
-- Stale timer operations and queued rotations no longer outlive the registration lifecycle that
-  created them.
-- A checkout-launched packaged app no longer loads bundled resources twice, and same-named
-  personal and bundled fortune files retain distinct source weights.
-- Configuration decoding now enforces bounded numeric and strict Boolean settings plus normalized
-  categorical values and resilient lists: malformed entries warn and recover independently,
-  finite out-of-range numbers clamp, and cowfile selection reports unavailable names and its
-  ordered resource fallbacks. The settings window shares this schema but is stricter: an
-  out-of-range, fractional, or unreadable entry is rejected in place rather than clamped, and a
-  save now only takes effect, and closes the window, once `config.json` has actually been
-  written — a failed write keeps the window open with every value intact and reports why.
+- Resource discovery is shared by the command-line tool and both front ends; a checkout-launched
+  packaged app no longer loads bundled resources twice.
+- Configuration decoding now uses bounded numeric and strict Boolean settings, normalized
+  categorical values, and resilient lists; malformed entries warn and recover independently.
 - The curated runtime corpus now excludes 23 records using body-size, weight, dieting, calorie, fattening, or appetite humor; it contains 3,470 fortunes.
 - CI now runs on macOS 14, 15, and the current GitHub-hosted macOS image; its fidelity job fails clearly if Homebrew no longer supplies cowsay 3.8.4.
-- Compatibility documentation records the macOS 26 Tahoe 26.4.1 Options-sheet and timer-activation rendering failures, and the absence of Swift Testing in a fresh Tahoe Command Line Tools installation.
 - Personal fortune loading is now bounded by fixed per-file, aggregate-byte, retained-record, and
   filesystem-entry limits, and never follows a symbolic link. Rejected cowfiles and personal
   fortune loader recovery events (an oversized, unreadable, or invalid file; an exhausted limit)
   are now surfaced through one consistently logged sequence on every engine creation, Options
   save, and activation-time reload, not only the first.
-- The settings window now sizes itself for the display it is actually presented on, rather than
-  the main display, and reapplies its height cap after that display changes.
-- Standalone `--fullscreen` and `--idle` presentation windows can now actually become key, so
-  keyboard, mouse-button, mouse-movement, and scroll input all reliably dismiss them. While
-  visible, connecting, disconnecting, or rearranging displays now keeps every current screen
-  covered — an added display shows a fortune immediately, a removed one leaves no stale window,
-  and a retained one keeps its current fortune rather than picking a new one.
+- Tahoe host geometry and Options-sheet behavior are diagnosed in the compatibility notes, with
+  application-side defenses awaiting direct Tahoe verification rather than a Tahoe support claim.
+
+### Fixed
+
+- A changed rotation interval now takes effect while the saver is active, and stale timer work
+  cannot outlive the lifecycle registration that created it.
+- Fortune selection gives files equal probability when `weightByFile` is enabled, applies
+  no-repeat history without biasing remaining records, and preserves distinct weights for
+  same-named personal and bundled files.
+- Out-of-range, fractional, or unreadable settings-window values are rejected in place; a failed
+  `config.json` write leaves the window open with its values intact and explains the failure.
+- Activation reloads edited configuration and reports unknown keys; unavailable cowfile names and
+  their ordered resource fallbacks are reported as well.
+- The settings window uses its presentation display, reapplies its height cap after that display
+  changes, and leaves room below its final button.
+- Detached views retain a usable fitting canvas, and the default theme remains named correctly.
+- Standalone `--fullscreen` and `--idle` windows accept keyboard and mouse dismissal and reconcile
+  added, removed, and rearranged displays without stale windows or unnecessary new fortunes.
 
 ## [1.0] - 2026-08-15
 

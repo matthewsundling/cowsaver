@@ -1,8 +1,12 @@
-# Release checklist
+# macOS compatibility checklist
 
-This is the maintainer's pass for checking Cowsaver against a version of macOS. Run it twice
+This is the maintainer's macOS compatibility pass, not the release procedure. Run it twice
 for each new macOS: once on the earliest beta available to test on, and again once that
 version has shipped publicly.
+
+For preparing and publishing a release, follow [the maintainer release procedure](releasing.md).
+This checklist supplies field evidence for compatibility wording; it does not replace those
+release state-transition steps.
 
 Third-party screensavers rely on an API Apple has deprecated, and a new macOS tends to break
 them in ways no source diff will show. Finding out means installing the saver and watching it
@@ -35,7 +39,8 @@ out badly. Set it back to `false` when the pass is over.
 | Check | How | Pass looks like |
 |---|---|---|
 | Build + provenance | `make clean && make install && make doctor` | Doctor shows the running OS, Command Line Tools, Swift, and the commit the saver was built from |
-| Unit + golden suite | `make test` (Xcode toolchain) or `make smoke` (Command Line Tools) | Green; 219 fixtures pass |
+| Full unit + golden suite | `make test` (a toolchain with Swift Testing) | Green; the full test suite passes, including golden fixtures |
+| Framework-free golden smoke check | `make smoke` (Command Line Tools) | All 219 cowsay-byte fixtures pass; this does not exercise AppKit layout, bundle loading, configuration, or screen presentation |
 | Settings preview | Wallpaper → Screen Saver, watch 3 rotations | Intact cow, no clipping |
 | Options sheet | Click Options; change a value; OK | The sheet opens inside the screen, and `config.json` holds the new value |
 | App settings | `./build/Cowsaver.app/Contents/MacOS/Cowsaver --configure`, change a value | The saver shows it at the next activation, without reinstalling |
