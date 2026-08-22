@@ -8,6 +8,7 @@ Sources/
   CowsayCLI/       cowsaver-cli command-line front end
   CowsaverRender/  AppKit rendering shared by the app and screensaver
   CowsaverSaver/   ScreenSaverView shell and Options sheet
+  CowsaverAppSupport/  app-only idle monitoring support
   CowsaverApp/     standalone AppKit front end
 ```
 
@@ -29,15 +30,19 @@ The core keeps byte-level text handling because cowsay counts bytes rather than 
 
 `CowsaverSaver` contains the `ScreenSaverView` subclass and the Options sheet. It is built by the Makefile because SwiftPM has no product type for a loadable screensaver bundle. The legacy ScreenSaver API is contained here; configuration is represented by the shared `Configuration` type.
 
+### `CowsaverAppSupport`
+
+`CowsaverAppSupport` owns the standalone app's idle monitoring and display-sleep assertion checks. Its idle-monitoring code and direct IOKit framework dependency are app-only for `CowsaverApp --idle`. Apple Swift may still record a weak `libswiftIOKit` load through Foundation-generated linker options; this is not a saver source dependency.
+
 ### `CowsaverApp`
 
-`CowsaverApp` is the convenient development front end, provides the `--render-to-png` path used by rendering tests, and supports manual fullscreen display when the installed saver is being diagnosed. It does not use ScreenSaver APIs and does not integrate with the lock screen.
+`CowsaverApp` is the convenient development front end, provides the `--render-to-png` path used by rendering tests, and supports manual fullscreen display when the installed saver is being diagnosed. It uses `CowsaverAppSupport` for `--idle`, does not use ScreenSaver APIs, and does not integrate with the lock screen.
 
 ## Build system
 
-`Package.swift` defines the core, command-line tool, app, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Xcode Command Line Tools are sufficient to build the products. The test suite also requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
+`Package.swift` defines the core, command-line tool, app, app-only support, and tests. The Makefile compiles the modules and assembles the `.saver` bundle, then copies the runtime cowfiles and curated fortunes into each product. Saver and app module objects, Swift modules, and module caches live in separate product-specific intermediate directories, so their builds can clean and compile concurrently. Xcode Command Line Tools are sufficient to build the products. The test suite also requires a Swift toolchain that includes Swift Testing; fresh macOS 26.4.1 Command Line Tools 26.6 did not provide it. See [issue #4](https://github.com/matthewsundling/cowsaver/issues/4).
 
-The screensaver and app link the shared modules statically. This avoids a runtime dynamic-library lookup from a bundle loaded by the sandboxed screensaver host.
+The screensaver and app link their modules statically. The app also links its app-only support module. This avoids a runtime dynamic-library lookup from a bundle loaded by the sandboxed screensaver host.
 
 ## Compatibility evidence
 

@@ -10,7 +10,8 @@ import PackageDescription
 //   CowsayCLI       cowsaver-cli, for compatibility checks against cowsay
 //   CowsaverRender  AppKit rendering shared by both front-ends
 //   CowsaverSaver   `.saver` shell, built by the Makefile
-//   CowsaverApp     NSApplication shell
+//   CowsaverAppSupport  app-only idle monitoring support
+//   CowsaverApp         NSApplication shell
 //
 // CowsaverRender is a SwiftPM target so `swift test` can cover the shared layout and
 // rotation behavior, even though the Makefile also compiles it into the saver bundle.
@@ -30,11 +31,13 @@ let package = Package(
     targets: [
         .target(name: "CowsayKit"),
         .target(name: "CowsaverRender", dependencies: ["CowsayKit"]),
+        .target(name: "CowsaverAppSupport"),
         .executableTarget(name: "CowsayCLI", dependencies: ["CowsayKit"]),
-        .executableTarget(name: "CowsaverApp", dependencies: ["CowsayKit", "CowsaverRender"]),
+        .executableTarget(name: "CowsaverApp", dependencies: ["CowsayKit", "CowsaverRender", "CowsaverAppSupport"]),
         // Golden fixtures are read by source-tree path. Excluding them avoids treating the
         // checked-in fixture files as SwiftPM resources.
         .testTarget(name: "CowsayKitTests", dependencies: ["CowsayKit"], exclude: ["Golden"]),
         .testTarget(name: "CowsaverRenderTests", dependencies: ["CowsaverRender"]),
+        .testTarget(name: "CowsaverAppSupportTests", dependencies: ["CowsaverAppSupport"]),
     ]
 )

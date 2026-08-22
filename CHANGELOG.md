@@ -11,6 +11,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- Idle monitoring now lives in app-only support, removing the saver's direct IOKit framework
+  dependency, and parallel saver and app builds use separate intermediates.
 - Fortune selection now gives files equal probability when `weightByFile` is enabled and applies
   no-repeat history without biasing the remaining eligible records.
 - Stale timer operations and queued rotations no longer outlive the registration lifecycle that

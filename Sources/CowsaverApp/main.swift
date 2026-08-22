@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import CowsayKit
+import CowsaverAppSupport
 import CowsaverRender
 import Foundation
 
@@ -102,7 +103,7 @@ func makeEngine(_ configuration: Configuration, seed: UInt64) -> CowsaverEngine 
 
 // MARK: - Offscreen render, for tests
 
-// Handle this before starting NSApplication so the render path needs no window-server session.
+// This runs before the app event loop and creates no visible window, but AppKit rendering still requires a GUI-capable user session.
 if case .renderPNG(let path, let size) = mode {
     let configuration = loadConfiguration()
     let engine = makeEngine(configuration, seed: 1)

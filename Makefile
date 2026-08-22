@@ -16,14 +16,17 @@ INSTALL_DIR     := $(HOME)/Library/Screen Savers
 # Keep the deployment target independent of the macOS version used for the build.
 TARGET_TRIPLE   := $(shell uname -m)-apple-macosx13.0
 
-# The bundle's modules are built separately and linked statically. Separate modules retain
-# their import boundaries, while static linking keeps the bundle self-contained.
-MODULES_DIR     := $(BUILD_DIR)/modules
-KIT_SOURCES     := $(wildcard $(SOURCES_DIR)/CowsayKit/*.swift)
-RENDER_SOURCES  := $(wildcard $(SOURCES_DIR)/CowsaverRender/*.swift)
-SAVER_SOURCES   := $(wildcard $(SOURCES_DIR)/CowsaverSaver/*.swift)
-APP_SOURCES     := $(wildcard $(SOURCES_DIR)/CowsaverApp/*.swift)
-SWIFTC_FLAGS    := -target $(TARGET_TRIPLE) -O -wmo
+# The products' modules are built separately and linked statically. Separate modules retain
+# their import boundaries, while product-specific intermediate directories make parallel
+# cleanup and compilation safe.
+SAVER_MODULES_DIR := $(BUILD_DIR)/modules/saver
+APP_MODULES_DIR   := $(BUILD_DIR)/modules/app
+KIT_SOURCES       := $(wildcard $(SOURCES_DIR)/CowsayKit/*.swift)
+RENDER_SOURCES    := $(wildcard $(SOURCES_DIR)/CowsaverRender/*.swift)
+SAVER_SOURCES     := $(wildcard $(SOURCES_DIR)/CowsaverSaver/*.swift)
+APP_SUPPORT_SOURCES := $(wildcard $(SOURCES_DIR)/CowsaverAppSupport/*.swift)
+APP_SOURCES       := $(wildcard $(SOURCES_DIR)/CowsaverApp/*.swift)
+SWIFTC_FLAGS      := -target $(TARGET_TRIPLE) -O -wmo
 
 # Stamped into Info.plist so a bug report can identify the environment that produced a
 # bundle, rather than asking a reporter to reconstruct it from memory.
@@ -37,6 +40,7 @@ GPU_FRAMEWORKS  := Metal|MetalKit|SceneKit|SpriteKit|WebKit|GLKit|OpenGL|OpenGLE
 
 # CowsayKit is Foundation-only, so the renderer core remains portable and independently testable.
 KIT_FORBIDDEN   := AppKit|Cocoa|ScreenSaver|CoreGraphics|QuartzCore|SwiftUI
+IOKIT_BOUNDARY_DIRS := $(SOURCES_DIR)/CowsaverRender $(SOURCES_DIR)/CowsaverSaver
 
 IMPORT_RE       := ^[[:space:]]*(@_exported[[:space:]]+)?import[[:space:]]+
 
@@ -51,21 +55,26 @@ all: saver app
 
 saver: check
 	@echo "==> building $(SAVER)"
-	@rm -rf "$(BUILD_DIR)/$(SAVER)" "$(MODULES_DIR)"
-	@mkdir -p "$(BUILD_DIR)/$(SAVER)/Contents/MacOS" "$(BUILD_DIR)/$(SAVER)/Contents/Resources" "$(MODULES_DIR)"
+	@rm -rf "$(BUILD_DIR)/$(SAVER)" "$(SAVER_MODULES_DIR)"
+	@mkdir -p "$(BUILD_DIR)/$(SAVER)/Contents/MacOS" "$(BUILD_DIR)/$(SAVER)/Contents/Resources" "$(SAVER_MODULES_DIR)"
 	@echo "  -> CowsayKit"
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsayKit \
-		-emit-module -emit-module-path "$(MODULES_DIR)/CowsayKit.swiftmodule" \
-		-emit-object -o "$(MODULES_DIR)/CowsayKit.o" $(KIT_SOURCES)
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(SAVER_MODULES_DIR)/module-cache" -module-name CowsayKit \
+		-emit-module -emit-module-path "$(SAVER_MODULES_DIR)/CowsayKit.swiftmodule" \
+		-emit-object -o "$(SAVER_MODULES_DIR)/CowsayKit.o" $(KIT_SOURCES)
 	@echo "  -> CowsaverRender"
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsaverRender -I "$(MODULES_DIR)" \
-		-emit-module -emit-module-path "$(MODULES_DIR)/CowsaverRender.swiftmodule" \
-		-emit-object -o "$(MODULES_DIR)/CowsaverRender.o" $(RENDER_SOURCES)
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(SAVER_MODULES_DIR)/module-cache" -module-name CowsaverRender -I "$(SAVER_MODULES_DIR)" \
+		-emit-module -emit-module-path "$(SAVER_MODULES_DIR)/CowsaverRender.swiftmodule" \
+		-emit-object -o "$(SAVER_MODULES_DIR)/CowsaverRender.o" $(RENDER_SOURCES)
 	@echo "  -> CowsaverSaver (bundle)"
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsaverSaver -I "$(MODULES_DIR)" \
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(SAVER_MODULES_DIR)/module-cache" -module-name CowsaverSaver -I "$(SAVER_MODULES_DIR)" \
 		-emit-library -Xlinker -bundle \
 		-o "$(BUILD_DIR)/$(SAVER)/Contents/MacOS/Cowsaver" \
-		"$(MODULES_DIR)/CowsayKit.o" "$(MODULES_DIR)/CowsaverRender.o" $(SAVER_SOURCES)
+		"$(SAVER_MODULES_DIR)/CowsayKit.o" "$(SAVER_MODULES_DIR)/CowsaverRender.o" $(SAVER_SOURCES)
+	# Swift may weak-link libswiftIOKit through Foundation-generated linker options without a source import; the source check and direct framework absence define this boundary.
+	@if otool -L "$(BUILD_DIR)/$(SAVER)/Contents/MacOS/Cowsaver" | grep -E '^[[:space:]]+/System/Library/Frameworks/IOKit\.framework/.*/IOKit[[:space:]]'; then \
+		echo "ERROR: the saver must not directly link IOKit.framework."; \
+		exit 1; \
+	fi
 	@cp -R Resources/cows Resources/fortune-curated "$(BUILD_DIR)/$(SAVER)/Contents/Resources/"
 	@sed -e 's|__VERSION__|$(VERSION)|g' \
 	     -e 's|__BUILD_OS__|$(BUILD_OS)|g' \
@@ -83,17 +92,20 @@ saver: check
 
 app: check
 	@echo "==> building $(APP)"
-	@rm -rf "$(BUILD_DIR)/$(APP)"
-	@mkdir -p "$(BUILD_DIR)/$(APP)/Contents/MacOS" "$(BUILD_DIR)/$(APP)/Contents/Resources" "$(MODULES_DIR)"
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsayKit \
-		-emit-module -emit-module-path "$(MODULES_DIR)/CowsayKit.swiftmodule" \
-		-emit-object -o "$(MODULES_DIR)/CowsayKit.o" $(KIT_SOURCES)
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsaverRender -I "$(MODULES_DIR)" \
-		-emit-module -emit-module-path "$(MODULES_DIR)/CowsaverRender.swiftmodule" \
-		-emit-object -o "$(MODULES_DIR)/CowsaverRender.o" $(RENDER_SOURCES)
-	@$(SWIFTC) $(SWIFTC_FLAGS) -module-name CowsaverApp -I "$(MODULES_DIR)" \
+	@rm -rf "$(BUILD_DIR)/$(APP)" "$(APP_MODULES_DIR)"
+	@mkdir -p "$(BUILD_DIR)/$(APP)/Contents/MacOS" "$(BUILD_DIR)/$(APP)/Contents/Resources" "$(APP_MODULES_DIR)"
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(APP_MODULES_DIR)/module-cache" -module-name CowsayKit \
+		-emit-module -emit-module-path "$(APP_MODULES_DIR)/CowsayKit.swiftmodule" \
+		-emit-object -o "$(APP_MODULES_DIR)/CowsayKit.o" $(KIT_SOURCES)
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(APP_MODULES_DIR)/module-cache" -module-name CowsaverRender -I "$(APP_MODULES_DIR)" \
+		-emit-module -emit-module-path "$(APP_MODULES_DIR)/CowsaverRender.swiftmodule" \
+		-emit-object -o "$(APP_MODULES_DIR)/CowsaverRender.o" $(RENDER_SOURCES)
+	@$(SWIFTC) $(SWIFTC_FLAGS) -parse-as-library -module-cache-path "$(APP_MODULES_DIR)/module-cache" -module-name CowsaverAppSupport \
+		-emit-module -emit-module-path "$(APP_MODULES_DIR)/CowsaverAppSupport.swiftmodule" \
+		-emit-object -o "$(APP_MODULES_DIR)/CowsaverAppSupport.o" $(APP_SUPPORT_SOURCES)
+	@$(SWIFTC) $(SWIFTC_FLAGS) -module-cache-path "$(APP_MODULES_DIR)/module-cache" -module-name CowsaverApp -I "$(APP_MODULES_DIR)" \
 		-o "$(BUILD_DIR)/$(APP)/Contents/MacOS/Cowsaver" \
-		"$(MODULES_DIR)/CowsayKit.o" "$(MODULES_DIR)/CowsaverRender.o" $(APP_SOURCES)
+		"$(APP_MODULES_DIR)/CowsayKit.o" "$(APP_MODULES_DIR)/CowsaverRender.o" "$(APP_MODULES_DIR)/CowsaverAppSupport.o" $(APP_SOURCES)
 	@cp -R Resources/cows Resources/fortune-curated "$(BUILD_DIR)/$(APP)/Contents/Resources/"
 	@sed -e 's|__VERSION__|$(VERSION)|g' \
 	     -e 's|__BUILD_OS__|$(BUILD_OS)|g' \
@@ -177,6 +189,12 @@ check:
 		echo "ERROR: $(KIT_DIR) imports a platform framework."; \
 		echo "       The core must stay portable — it is what survives when .saver dies."; \
 		echo "       Put platform code in CowsaverRender/ or a front-end target instead."; \
+		exit 1; \
+	fi
+	@echo "==> check: IOKit is app-only idle support"
+	@if grep -rnE '$(IMPORT_RE)IOKit\b' $(IOKIT_BOUNDARY_DIRS) ; then \
+		echo ""; \
+		echo "ERROR: IOKit belongs to the standalone app's idle support, not the shared renderer or saver."; \
 		exit 1; \
 	fi
 	@echo "==> check: ok"
