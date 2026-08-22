@@ -52,35 +52,98 @@ public struct FortuneLoadOptions: Sendable {
 public struct FortuneDatabase: Sendable {
     public struct Statistics: Sendable, Equatable {
         public var filesRead = 0
+        /// Compatibility exclusions and fortune data files skipped during recovery. An
+        /// `off` directory counts once because its descendants are deliberately not examined;
+        /// the more specific `*Skipped` counters classify recovery cases.
         public var filesSkipped = 0
         public var droppedTooTall = 0
         public var droppedUnsafe = 0
         /// Records suppressed by an `excluded.txt` list.
         public var droppedExcluded = 0
 
+        /// A candidate exceeded the per-file byte cap before or during its bounded read
+        /// and was not decoded.
+        public var oversizedFilesSkipped = 0
+        /// A filesystem item could not be inspected or an eligible file could not be read.
+        public var unreadableFilesSkipped = 0
+        /// A candidate read successfully but was not valid UTF-8.
+        public var invalidUTF8FilesSkipped = 0
+        /// A symbolic-link root, directory, or file. Links are never followed; descendant
+        /// links count as examined entries, while root checks do not.
+        public var symbolicLinksSkipped = 0
+
+        /// Filesystem entries this load examined: every file, directory, and symbolic
+        /// link that traversal or exclusion-list discovery looked at, bounded by
+        /// `Limits.maxExaminedEntries`.
+        public var entriesExamined = 0
+        /// Set when the examined-entry cap ended traversal before every root was fully walked.
+        public var entryLimitReached = false
+        /// Set when the aggregate-byte cap ended reading before every eligible file was read.
+        public var aggregateByteLimitReached = false
+        /// Set when the retained-record cap ended parsing before every eligible record was kept.
+        public var recordLimitReached = false
+
         public init(filesRead: Int = 0, filesSkipped: Int = 0,
                     droppedTooTall: Int = 0, droppedUnsafe: Int = 0,
-                    droppedExcluded: Int = 0) {
+                    droppedExcluded: Int = 0,
+                    oversizedFilesSkipped: Int = 0, unreadableFilesSkipped: Int = 0,
+                    invalidUTF8FilesSkipped: Int = 0, symbolicLinksSkipped: Int = 0,
+                    entriesExamined: Int = 0, entryLimitReached: Bool = false,
+                    aggregateByteLimitReached: Bool = false, recordLimitReached: Bool = false) {
             self.filesRead = filesRead
             self.filesSkipped = filesSkipped
             self.droppedTooTall = droppedTooTall
             self.droppedUnsafe = droppedUnsafe
             self.droppedExcluded = droppedExcluded
+            self.oversizedFilesSkipped = oversizedFilesSkipped
+            self.unreadableFilesSkipped = unreadableFilesSkipped
+            self.invalidUTF8FilesSkipped = invalidUTF8FilesSkipped
+            self.symbolicLinksSkipped = symbolicLinksSkipped
+            self.entriesExamined = entriesExamined
+            self.entryLimitReached = entryLimitReached
+            self.aggregateByteLimitReached = aggregateByteLimitReached
+            self.recordLimitReached = recordLimitReached
         }
+    }
+
+    /// Fixed bounds on one `load()` call's filesystem work, memory retention, and
+    /// diagnostic volume.
+    ///
+    /// These are package behavior, not user settings. They keep an oversized or adversarial
+    /// personal collection from stalling initialization or growing retained memory without
+    /// bound. Tests exercise the boundaries through an internal overload with smaller values
+    /// rather than constructing production-sized fixtures for every case.
+    struct Limits: Sendable, Equatable {
+        var maxFileBytes: Int
+        var maxAggregateBytes: Int
+        var maxRetainedRecords: Int
+        var maxExaminedEntries: Int
+
+        static let production = Limits(
+            maxFileBytes: 8 * 1024 * 1024,
+            maxAggregateBytes: 32 * 1024 * 1024,
+            maxRetainedRecords: 100_000,
+            maxExaminedEntries: 1_000
+        )
     }
 
     public private(set) var fortunes: [Fortune]
     public private(set) var statistics: Statistics
     /// Raw byte count per source file, retained as loading metadata.
     public private(set) var weights: [String: Int]
+    /// Bounded, content-safe descriptions of loader recovery events, named by standardized
+    /// source path. `statistics` keeps complete counts even past the detail cap a caller
+    /// applies when logging these.
+    public private(set) var issues: [String]
 
     public var isEmpty: Bool { fortunes.isEmpty }
 
     public init(fortunes: [Fortune] = [], statistics: Statistics = .init(),
-                weights: [String: Int] = [:]) {
+                weights: [String: Int] = [:], issues: [String] = []) {
         self.fortunes = fortunes
         self.statistics = statistics
         self.weights = weights
+        self.issues = issues
     }
 
     /// Returns the compiled-in fallback fortunes.
@@ -103,44 +166,114 @@ public struct FortuneDatabase: Sendable {
         excluded: Set<String> = [],
         statistics: inout Statistics
     ) -> [Fortune] {
+        parse(contents: contents, source: source, options: options, excluded: excluded,
+             statistics: &statistics, maxRecords: .max, lineObserver: nil)
+    }
+
+    /// `maxRecords` lets `load(directories:options:limits:)` stop retaining once the
+    /// aggregate record cap is reached. The input is scanned by string index rather than
+    /// split into an array of lines or records. Each record is filtered when its terminating
+    /// `%` (or end of input) is reached, and no later record is scanned after the cap.
+    ///
+    /// `lineObserver`, when non-nil, is called once per line actually visited. It exists
+    /// only so a focused test can prove that stop is real: the filtering counters alone
+    /// cannot distinguish "a later record was never scanned" from "it was scanned and
+    /// happened to be filtered out," so a test needs a seam that counts visits directly.
+    ///
+    /// The public `parse` above is unbounded, matching its existing direct-caller contract;
+    /// only the internal loader needs the cap.
+    static func parse(
+        contents: String,
+        source: String,
+        options: FortuneLoadOptions,
+        excluded: Set<String>,
+        statistics: inout Statistics,
+        maxRecords: Int,
+        lineObserver: (() -> Void)? = nil
+    ) -> [Fortune] {
         let normalised = contents.replacingOccurrences(of: "\r\n", with: "\n")
-        var records: [String] = []
-        var current: [Substring] = []
-
-        // Fortune files have no comment syntax. Cowsaver treats consecutive leading `##`
-        // lines as provenance metadata; `##` remains ordinary quote text elsewhere.
-        var lines = normalised.split(separator: "\n", omittingEmptySubsequences: false)[...]
-        while let first = lines.first, first.hasPrefix("##") { lines = lines.dropFirst() }
-
-        for line in lines {
-            if line == "%" {
-                records.append(current.joined(separator: "\n"))
-                current = []
-            } else {
-                current.append(line)
-            }
-        }
-        records.append(current.joined(separator: "\n"))
 
         var out: [Fortune] = []
-        for record in records {
+
+        // Filters and, if eligible, retains one already-delimited record. Returns false
+        // once the retained-record cap has been reached, telling the caller to stop
+        // scanning further lines rather than assemble a record that will not be kept.
+        func admit(_ record: Substring) -> Bool {
+            guard out.count < maxRecords else {
+                statistics.recordLimitReached = true
+                return false
+            }
             let text = record.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { continue }
+            guard !text.isEmpty else { return true }
             if options.maxLines > 0,
                isTallerThan(options.maxLines, text: text, columns: options.wrapColumns) {
                 statistics.droppedTooTall += 1
-                continue
+                return true
             }
             if options.filterUnsafeCharacters, !isSafe(text) {
                 statistics.droppedUnsafe += 1
-                continue
+                return true
             }
             // Suppress records listed by the collection's optional excluded.txt file.
             if !excluded.isEmpty, excluded.contains(Fortune.identifier(for: text)) {
                 statistics.droppedExcluded += 1
-                continue
+                return true
             }
             out.append(Fortune(text: text, source: source))
+            return true
+        }
+
+        guard maxRecords > 0 else {
+            statistics.recordLimitReached = true
+            return out
+        }
+
+        // Fortune files have no comment syntax. Consecutive leading `##` lines are
+        // provenance metadata; `##` remains ordinary quote text after the first
+        // non-metadata line. Finding each newline from the previous one keeps only the
+        // source string and the current record range in memory.
+        var lineStart = normalised.startIndex
+        var recordStart: String.Index?
+        var droppingLeadingMetadata = true
+
+        while true {
+            let newline = normalised[lineStart...].firstIndex(of: "\n")
+            let lineEnd = newline ?? normalised.endIndex
+            let line = normalised[lineStart ..< lineEnd]
+            lineObserver?()
+
+            if droppingLeadingMetadata, line.hasPrefix("##") {
+                // The next line may still be provenance metadata.
+            } else {
+                if droppingLeadingMetadata {
+                    droppingLeadingMetadata = false
+                    recordStart = lineStart
+                }
+
+                if line == "%" {
+                    guard admit(normalised[(recordStart ?? lineStart) ..< lineStart]) else {
+                        return out
+                    }
+                    // A delimiter establishes that another record follows. Once this
+                    // delimiter retained the last allowed record, stop before visiting
+                    // even the first line of the next one.
+                    if out.count >= maxRecords {
+                        statistics.recordLimitReached = true
+                        return out
+                    }
+                    recordStart = newline.map { normalised.index(after: $0) }
+                        ?? normalised.endIndex
+                }
+            }
+
+            guard let newline else { break }
+            lineStart = normalised.index(after: newline)
+        }
+
+        if let recordStart {
+            _ = admit(normalised[recordStart ..< normalised.endIndex])
+        } else {
+            _ = admit(normalised[normalised.endIndex ..< normalised.endIndex])
         }
         return out
     }
@@ -197,65 +330,162 @@ public struct FortuneDatabase: Sendable {
 
     // MARK: - Loading
 
-    /// Load every fortune file in the given directories.
+    /// Load every eligible fortune file in the given directories, subject to
+    /// `Limits.production`.
     ///
-    /// Unreadable files are counted and skipped.
+    /// Unreadable, invalid, oversized, and symbolic-link candidates are counted and
+    /// skipped rather than causing the load to fail.
     public static func load(
         directories: [URL],
         options: FortuneLoadOptions = .init()
     ) -> FortuneDatabase {
-        var fortunes: [Fortune] = []
+        load(directories: directories, options: options, limits: .production)
+    }
+
+    /// Running totals for one `load()` call. A reference type so the walk and its
+    /// per-candidate helpers can update one set of counters without threading a long
+    /// `inout` parameter list; it never escapes the `load()` call that creates it.
+    /// Internal rather than private so focused tests can drive its bounded-read logic
+    /// directly with injected `Limits`.
+    final class LoadBudget {
+        let limits: Limits
         var statistics = Statistics()
-        var weights: [String: Int] = [:]
-        let fm = FileManager.default
+        var issues: [String] = []
+        private var aggregateBytesRead = 0
+        private(set) var retainedCount = 0
 
-        for directory in ResourceLocations.standardizedDirectories(directories) {
-            var isDirectory: ObjCBool = false
-            guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue,
-                  let walker = fm.enumerator(atPath: directory.path) else { continue }
+        init(limits: Limits) { self.limits = limits }
 
-            let excluded = loadExclusions(in: directory)
-
-            for case let relative as String in walker {
-                let name = (relative as NSString).lastPathComponent
-                // fortune's convention for separately distributed content: an `-o` suffix
-                // or an `off/` directory. Skip those files.
-                let isExcludedByConvention = name.hasSuffix("-o") || relative.contains("off/")
-
-                // Fortune data files have no extension. Files with extensions are indexes or
-                // adjacent metadata and are not quote sources.
-                if name.hasPrefix(".") || name.contains(".") { continue }
-                if metadataFilenames.contains(name) { continue }
-                if isExcludedByConvention {
-                    statistics.filesSkipped += 1
-                    continue
-                }
-
-                let path = directory.appendingPathComponent(relative)
-                var pathIsDirectory: ObjCBool = false
-                guard fm.fileExists(atPath: path.path, isDirectory: &pathIsDirectory),
-                      !pathIsDirectory.boolValue,
-                      let data = fm.contents(atPath: path.path),
-                      let contents = String(data: data, encoding: .utf8) else {
-                    statistics.filesSkipped += 1
-                    continue
-                }
-
-                // A relative filename is ambiguous across intended collections. Keep the
-                // standardized root in the identity so each file owns its own weight.
-                let source = path.standardizedFileURL.path
-                let parsed = parse(contents: contents, source: source, options: options,
-                                   excluded: excluded,
-                                   statistics: &statistics)
-                guard !parsed.isEmpty else { continue }
-                statistics.filesRead += 1
-                weights[source] = data.count
-                fortunes += parsed
-            }
+        /// Any exhausted cap stops all further load work, in every root — not just the
+        /// directory or file being looked at when it tripped.
+        var shouldStop: Bool {
+            statistics.entryLimitReached || statistics.aggregateByteLimitReached
+                || statistics.recordLimitReached
         }
 
-        return FortuneDatabase(fortunes: fortunes, statistics: statistics, weights: weights)
+        var recordBudgetRemaining: Int { max(0, limits.maxRetainedRecords - retainedCount) }
+
+        func retain(_ count: Int) { retainedCount += count }
+
+        /// Registers one more examined filesystem entry. Every descendant traversal
+        /// actually yields consumes one, including ignored metadata and rejected
+        /// candidates: the cap bounds *examination*, not just parsing, so a directory
+        /// full of unusable files cannot be walked forever. A path this load merely
+        /// probes and finds absent (a candidate exclusion list that does not exist) is
+        /// not a descendant traversal encountered and must not call this.
+        func consumeEntry() -> Bool {
+            guard statistics.entriesExamined < limits.maxExaminedEntries else {
+                statistics.entryLimitReached = true
+                return false
+            }
+            statistics.entriesExamined += 1
+            return true
+        }
+
+        /// The outcome of trying to read one candidate's bytes.
+        enum ReadOutcome {
+            case success(Data)
+            case unreadable
+            case overPerFileCap
+            case overAggregateCap
+        }
+
+        /// Reads at most the admitted number of bytes for one candidate, never trusting
+        /// `statedSize` for anything beyond an initial fast rejection of an obviously
+        /// oversized file: the file can still grow between that metadata read and this
+        /// one, so only the *actual* bytes `reader` returns decide the outcome and get
+        /// charged to the aggregate cap. An unreadable or over-cap result charges
+        /// nothing and is never decoded; the reader retains at most the one-byte
+        /// lookahead needed to distinguish an exact boundary from an oversized file.
+        func readBounded(
+            atPath path: String, statedSize: Int?, reader: (String, Int) -> Data?
+        ) -> ReadOutcome {
+            guard let statedSize else { return .unreadable }
+            guard statedSize <= limits.maxFileBytes else { return .overPerFileCap }
+
+            let aggregateRemaining = max(0, limits.maxAggregateBytes - aggregateBytesRead)
+            let boundedLimit = min(limits.maxFileBytes, aggregateRemaining)
+            // One byte past the bound is enough to prove "exceeds" without ever reading
+            // a much larger file fully into memory.
+            let readLimit = boundedLimit == Int.max ? Int.max : boundedLimit + 1
+            guard let data = reader(path, readLimit) else { return .unreadable }
+            if data.count > limits.maxFileBytes {
+                return .overPerFileCap
+            }
+            if data.count > aggregateRemaining {
+                statistics.aggregateByteLimitReached = true
+                return .overAggregateCap
+            }
+
+            // Actual bytes, never metadata: this cannot fail, since data.count <=
+            // boundedLimit <= aggregateRemaining by construction, but it is routed
+            // through the same overflow-checked accumulator as everything else so there
+            // is exactly one place that ever adds to the aggregate total.
+            _ = reserveAggregateBytes(data.count)
+            return .success(data)
+        }
+
+        /// Reserves `size` more bytes against the aggregate cap using overflow-checked
+        /// addition. File size metadata is attacker- or accident-controlled and must
+        /// never be trusted to add safely; exercised directly by tests that simulate an
+        /// extreme reported size without needing to create a file that large.
+        func reserveAggregateBytes(_ size: Int) -> Bool {
+            let (sum, overflowed) = aggregateBytesRead.addingReportingOverflow(size)
+            guard !overflowed, sum <= limits.maxAggregateBytes else {
+                statistics.aggregateByteLimitReached = true
+                return false
+            }
+            aggregateBytesRead = sum
+            return true
+        }
+
+        func addDetail(_ text: String) {
+            issues.append(text)
+        }
+    }
+
+    /// Collects bounded chunks. Clean EOF returns the bytes accumulated so far; any read
+    /// error rejects the entire candidate rather than treating a partial prefix as a file.
+    static func collectBoundedData(
+        maxBytes: Int, readChunk: (Int) throws -> Data?
+    ) -> Data? {
+        var data = Data()
+        do {
+            while data.count < maxBytes {
+                let remaining = maxBytes - data.count
+                guard let chunk = try readChunk(remaining), !chunk.isEmpty else { break }
+                guard chunk.count <= remaining else { return nil }
+                data.append(chunk)
+            }
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    /// The production byte reader opens the file and collects at most `maxBytes`, so a
+    /// file's true size does not control how much memory one call allocates.
+    private static func boundedFileReader(atPath path: String, maxBytes: Int) -> Data? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        return collectBoundedData(maxBytes: maxBytes) { remaining in
+            try handle.read(upToCount: remaining)
+        }
+    }
+
+    /// Parses `excluded.txt` line syntax: one stable Fortune identifier per line, with an
+    /// optional trailing comment; blank lines and lines starting with `#` are ignored.
+    private static func exclusionIdentifiers(in text: String) -> Set<String> {
+        var identifiers: Set<String> = []
+        for line in text.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            // "<id>   # reason" — take the first field.
+            let identifier = trimmed.split(whereSeparator: { $0 == " " || $0 == "\t" })
+                .first.map(String.init) ?? trimmed
+            if identifier.count >= 8 { identifiers.insert(identifier.lowercased()) }
+        }
+        return identifiers
     }
 
     /// Documentation and metadata that live alongside the data and must never be parsed
@@ -264,32 +494,210 @@ public struct FortuneDatabase: Sendable {
         "LICENSE", "COPYING", "README", "NOTES", "CREDITS", "MANIFEST", "PROVENANCE",
     ]
 
-    /// Read an `excluded.txt` list, if the directory has one.
+    /// `reader` stands in for reading a candidate's bytes, bounded to at most the given
+    /// number of bytes. Production code never overrides it; tests use it as a
+    /// deterministic seam — for an unreadable path, or for simulating a file whose actual
+    /// content differs from its stated metadata size — that does not depend on chmod
+    /// (whose effect differs for a privileged test-running user) or on constructing a
+    /// real multi-gigabyte fixture.
     ///
-    /// Each loaded collection may supply an exclusion list at its root or one directory
-    /// below it. Entries are stable Fortune identifiers; comments and blank lines are ignored.
-    static func loadExclusions(in directory: URL) -> Set<String> {
-        var identifiers: Set<String> = []
+    /// `entryFetchObserver`, when non-nil, is called once per attempt to advance the
+    /// underlying filesystem enumerator, whether or not it yields an item. It exists only
+    /// so a focused test can prove traversal never advances past the entry budget: with a
+    /// directory of many more entries than the injected cap, the observed call count must
+    /// stay near the cap regardless of the directory's real size.
+    static func load(
+        directories: [URL],
+        options: FortuneLoadOptions,
+        limits: Limits,
+        reader: (String, Int) -> Data? = boundedFileReader,
+        entryFetchObserver: (() -> Void)? = nil
+    ) -> FortuneDatabase {
+        let budget = LoadBudget(limits: limits)
+        var fortunes: [Fortune] = []
+        var weights: [String: Int] = [:]
         let fm = FileManager.default
+        let resourceKeyList: [URLResourceKey] = [
+            .isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey, .fileSizeKey,
+        ]
+        let resourceKeySet = Set(resourceKeyList)
 
-        var candidates = [directory.appendingPathComponent("excluded.txt")]
-        if let entries = try? fm.contentsOfDirectory(at: directory,
-                                                     includingPropertiesForKeys: nil) {
-            candidates += entries.map { $0.appendingPathComponent("excluded.txt") }
-        }
+        for directory in ResourceLocations.standardizedDirectories(directories) {
+            guard !budget.shouldStop else { break }
 
-        for candidate in candidates {
-            guard let data = fm.contents(atPath: candidate.path),
-                  let text = String(data: data, encoding: .utf8) else { continue }
-            for line in text.split(separator: "\n") {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
-                // "<id>   # reason" — take the first field.
-                let identifier = trimmed.split(whereSeparator: { $0 == " " || $0 == "\t" })
-                    .first.map(String.init) ?? trimmed
-                if identifier.count >= 8 { identifiers.insert(identifier.lowercased()) }
+            // Root existence and symbolic-link checks do not consume an entry: they are
+            // not descendants of anything traversal has entered yet. A symbolic-link
+            // root is still a real recovery event, though, and is reported like any
+            // other skipped symbolic link — just without spending the entry budget.
+            guard let rootValues = try? directory.resourceValues(
+                forKeys: [.isSymbolicLinkKey, .isDirectoryKey]
+            ) else { continue }
+            if rootValues.isSymbolicLink == true {
+                budget.statistics.symbolicLinksSkipped += 1
+                budget.addDetail(
+                    "\(directory.standardizedFileURL.path): symbolic-link root; skipped"
+                )
+                continue
+            }
+            guard rootValues.isDirectory == true else { continue }
+
+            // One incremental filesystem walk per root. This code requests descendants
+            // one at a time and neither accumulates nor sorts a directory listing. Once
+            // the budget is exhausted it does not request another descendant, and the
+            // diagnostic makes no ordering promise about unseen entries.
+            //
+            // Exclusion identifiers and eligible fortune bytes are collected together in
+            // this single pass; parsing is deferred to the `pending` loop below so a
+            // file admitted early is still filtered by a later sibling's `excluded.txt`,
+            // preserving the root-plus-one-level-deep union semantics.
+            guard let walker = fm.enumerator(
+                at: directory, includingPropertiesForKeys: resourceKeyList, options: [],
+                errorHandler: { _, _ in true }
+            ) else { continue }
+
+            var excluded: Set<String> = []
+            // Everything buffered here was charged when read, so its source data cannot
+            // exceed `Limits.maxAggregateBytes`. This preserves root-wide exclusions
+            // without creating another unbounded retention point.
+            var pending: [(source: String, contents: String, byteCount: Int)] = []
+
+            while !budget.shouldStop {
+                entryFetchObserver?()
+                guard let child = walker.nextObject() as? URL else { break }
+                guard budget.consumeEntry() else { break }
+
+                guard let values = try? child.resourceValues(forKeys: resourceKeySet) else {
+                    budget.statistics.unreadableFilesSkipped += 1
+                    budget.addDetail(
+                        "\(child.standardizedFileURL.path): metadata unavailable; skipped"
+                    )
+                    continue
+                }
+
+                // Symbolic-link status is checked first and unconditionally: a link is
+                // never opened, never sized against the file cap, and never descended
+                // into, whatever it names or points at.
+                if values.isSymbolicLink == true {
+                    budget.statistics.symbolicLinksSkipped += 1
+                    budget.addDetail(
+                        "\(child.standardizedFileURL.path): symbolic link; skipped"
+                    )
+                    walker.skipDescendants()
+                    continue
+                }
+
+                let name = child.lastPathComponent
+                if values.isDirectory == true {
+                    // fortune-mod's convention for separately distributed content: a
+                    // directory *component* exactly equal to "off" (not a name that
+                    // merely contains it, like "handoff" or "office"). Pruned here,
+                    // rather than filtered per-file after a full walk, so descendants
+                    // are never examined at all and cannot spend the entry budget.
+                    if name == "off" {
+                        budget.statistics.filesSkipped += 1
+                        walker.skipDescendants()
+                    }
+                    continue
+                }
+
+                guard values.isRegularFile == true else { continue }
+
+                // Exclusion lists apply at the root and one level below it — exactly
+                // enumerator levels 1 and 2 relative to this root — and are never
+                // treated as fortune candidates even at a deeper, unhonored level, where
+                // the ordinary dotted-name rule below already ignores them quietly.
+                if name == "excluded.txt", walker.level <= 2 {
+                    let source = child.standardizedFileURL.path
+                    switch budget.readBounded(atPath: child.path, statedSize: values.fileSize,
+                                              reader: reader) {
+                    case .unreadable:
+                        budget.statistics.unreadableFilesSkipped += 1
+                        budget.addDetail("\(source): exclusion list unreadable; skipped")
+                    case .overPerFileCap:
+                        budget.statistics.oversizedFilesSkipped += 1
+                        budget.addDetail(
+                            "\(source): exclusion list larger than \(limits.maxFileBytes) "
+                                + "bytes; skipped"
+                        )
+                    case .overAggregateCap:
+                        break
+                    case .success(let data):
+                        if let text = String(data: data, encoding: .utf8) {
+                            excluded.formUnion(Self.exclusionIdentifiers(in: text))
+                        } else {
+                            budget.statistics.invalidUTF8FilesSkipped += 1
+                            budget.addDetail(
+                                "\(source): exclusion list invalid UTF-8; skipped"
+                            )
+                        }
+                    }
+                    continue
+                }
+
+                // Documentation and fortune's own binary indexes live alongside the
+                // data and must stay quiet: they are intentionally ignored, not
+                // recovered from, so traversal still counts them as examined but never
+                // as skipped.
+                if name.hasPrefix(".") || name.contains(".") { continue }
+                if metadataFilenames.contains(name) { continue }
+                // The filename half of the "off" convention.
+                if name.hasSuffix("-o") {
+                    budget.statistics.filesSkipped += 1
+                    continue
+                }
+
+                guard budget.recordBudgetRemaining > 0 else {
+                    budget.statistics.recordLimitReached = true
+                    break
+                }
+
+                let source = child.standardizedFileURL.path
+                switch budget.readBounded(atPath: child.path, statedSize: values.fileSize,
+                                          reader: reader) {
+                case .unreadable:
+                    budget.statistics.unreadableFilesSkipped += 1
+                    budget.statistics.filesSkipped += 1
+                    budget.addDetail("\(source): unreadable; skipped")
+                case .overPerFileCap:
+                    budget.statistics.oversizedFilesSkipped += 1
+                    budget.statistics.filesSkipped += 1
+                    budget.addDetail("\(source): larger than \(limits.maxFileBytes) bytes; skipped")
+                case .overAggregateCap:
+                    break
+                case .success(let data):
+                    guard let contents = String(data: data, encoding: .utf8) else {
+                        budget.statistics.invalidUTF8FilesSkipped += 1
+                        budget.statistics.filesSkipped += 1
+                        budget.addDetail("\(source): invalid UTF-8; skipped")
+                        continue
+                    }
+                    // A relative filename is ambiguous across intended collections;
+                    // the standardized root stays in the identity so each file owns
+                    // its own weight.
+                    pending.append((source: source, contents: contents, byteCount: data.count))
+                }
+            }
+
+            // Exclusions for this root are only complete once its walk — or the cap
+            // that cut it short — has finished, so buffered candidates are parsed and
+            // filtered now, never before.
+            for item in pending {
+                guard budget.recordBudgetRemaining > 0 else {
+                    budget.statistics.recordLimitReached = true
+                    break
+                }
+                let parsed = parse(contents: item.contents, source: item.source, options: options,
+                                   excluded: excluded, statistics: &budget.statistics,
+                                   maxRecords: budget.recordBudgetRemaining)
+                guard !parsed.isEmpty else { continue }
+                budget.statistics.filesRead += 1
+                weights[item.source] = item.byteCount
+                fortunes += parsed
+                budget.retain(parsed.count)
             }
         }
-        return identifiers
+
+        return FortuneDatabase(fortunes: fortunes, statistics: budget.statistics,
+                               weights: weights, issues: budget.issues)
     }
 }

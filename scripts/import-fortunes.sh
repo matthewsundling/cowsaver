@@ -74,11 +74,31 @@ import() {
             case "$base" in
                 *.dat|*.u8|.*) skipped=$((skipped+1)); continue ;;
             esac
-            # fortune's convention for separately distributed content: an -o suffix or an
-            # off/ directory. Skip those files.
-            case "$base$relative" in
-                *-o|*off/*) skipped=$((skipped+1)); continue ;;
+            # fortune's convention for separately distributed content: an -o suffix on the
+            # filename, or a directory *component* exactly equal to "off" somewhere above
+            # it. Component matching, not a substring test: "handoff/quotes" and
+            # "office/quotes" are ordinary content, not the "off/" convention.
+            local skip_by_convention=false
+            case "$base" in
+                *-o) skip_by_convention=true ;;
             esac
+            if [[ "$skip_by_convention" == false ]]; then
+                local dir dir_parts part
+                dir="$(dirname "$relative")"
+                if [[ "$dir" != "." ]]; then
+                    IFS='/' read -ra dir_parts <<< "$dir"
+                    for part in "${dir_parts[@]}"; do
+                        if [[ "$part" == "off" ]]; then
+                            skip_by_convention=true
+                            break
+                        fi
+                    done
+                fi
+            fi
+            if [[ "$skip_by_convention" == true ]]; then
+                skipped=$((skipped+1))
+                continue
+            fi
 
             if [[ "$dry_run" == true ]]; then
                 say "    would copy: $relative"

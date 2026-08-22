@@ -27,6 +27,11 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 - The curated runtime corpus now excludes 23 records using body-size, weight, dieting, calorie, fattening, or appetite humor; it contains 3,470 fortunes.
 - CI now runs on macOS 14, 15, and the current GitHub-hosted macOS image; its fidelity job fails clearly if Homebrew no longer supplies cowsay 3.8.4.
 - Compatibility documentation records the macOS 26 Tahoe 26.4.1 Options-sheet and timer-activation rendering failures, and the absence of Swift Testing in a fresh Tahoe Command Line Tools installation.
+- Personal fortune loading is now bounded by fixed per-file, aggregate-byte, retained-record, and
+  filesystem-entry limits, and never follows a symbolic link. Rejected cowfiles and personal
+  fortune loader recovery events (an oversized, unreadable, or invalid file; an exhausted limit)
+  are now surfaced through one consistently logged sequence on every engine creation, Options
+  save, and activation-time reload, not only the first.
 
 ## [1.0] - 2026-08-15
 

@@ -15,6 +15,12 @@ public final class CowsaverEngine {
         public var usingBuiltInCow = false
         public var usingBuiltInFortunes = false
         public var notes: [String] = []
+        /// One authoritative, human-readable, content-safe sequence for front-end
+        /// logging: `notes` followed by at most 50 resource-specific details drawn from
+        /// `cowfilesRejected` and personal fortune loader recovery/limit events, then one
+        /// summary line if more details existed than the 50 shown. Every engine-creation
+        /// call site should log exactly this sequence rather than assembling its own.
+        public var messages: [String] = []
     }
 
     private let configuration: Configuration
@@ -92,15 +98,54 @@ public final class CowsaverEngine {
                                           seed: seed &* 31)
 
         // --- Fortunes -----------------------------------------------------------
-        var database = FortuneDatabase.load(directories: fortuneDirectories,
-                                            options: configuration.fortuneLoadOptions)
-        diagnostics.fortuneStatistics = database.statistics
+        let loaded = FortuneDatabase.load(directories: fortuneDirectories,
+                                          options: configuration.fortuneLoadOptions)
+        diagnostics.fortuneStatistics = loaded.statistics
+        if loaded.statistics.entryLimitReached {
+            diagnostics.notes.append(
+                "personal fortune loading stopped after examining "
+                    + "\(FortuneDatabase.Limits.production.maxExaminedEntries) filesystem "
+                    + "entries; some directories were not fully scanned"
+            )
+        }
+        if loaded.statistics.aggregateByteLimitReached {
+            diagnostics.notes.append(
+                "personal fortune loading reached its "
+                    + "\(FortuneDatabase.Limits.production.maxAggregateBytes)-byte limit; "
+                    + "later files were not read"
+            )
+        }
+        if loaded.statistics.recordLimitReached {
+            diagnostics.notes.append(
+                "personal fortune loading stopped after retaining "
+                    + "\(FortuneDatabase.Limits.production.maxRetainedRecords) records; "
+                    + "later records were not retained"
+            )
+        }
+
+        var database = loaded
         if database.isEmpty {
             database = .builtIn()
             diagnostics.usingBuiltInFortunes = true
             diagnostics.notes.append("no fortunes found; using the built-in set")
         }
         diagnostics.fortunesLoaded = database.fortunes.count
+
+        // --- Authoritative diagnostic sequence -----------------------------------
+        //
+        // Resource-specific details (one rejected cowfile or one loader recovery event
+        // apiece) are bounded to 50 for logging even though the structured counts above
+        // stay complete; ordinary notes are not resource-specific and are never dropped.
+        let resourceDetails = library.failures.map { "cowfile \($0.name): \($0.reason)" }
+            + loaded.issues
+        let detailLimit = 50
+        diagnostics.messages = diagnostics.notes + resourceDetails.prefix(detailLimit)
+        if resourceDetails.count > detailLimit {
+            diagnostics.messages.append(
+                "\(resourceDetails.count - detailLimit) additional resource-specific "
+                    + "detail(s) omitted"
+            )
+        }
 
         self.fortunePicker = NoRepeatSelector(database: database, historyLimit: 20,
                                               seed: seed,

@@ -160,5 +160,19 @@ struct ResourceIdentityTests {
             .standardizedFileURL])
         #expect(database.fortunes.count == 3_470)
         #expect(database.statistics.filesRead == 1)
+        #expect(database.fortunes.allSatisfy {
+            $0.source == bundleResources.appendingPathComponent("fortune-curated/fortunes")
+                .standardizedFileURL.path
+        })
+
+        // The packaged collection is well within every loading limit.
+        #expect(!database.statistics.entryLimitReached)
+        #expect(!database.statistics.aggregateByteLimitReached)
+        #expect(!database.statistics.recordLimitReached)
+        #expect(database.statistics.oversizedFilesSkipped == 0)
+        #expect(database.statistics.unreadableFilesSkipped == 0)
+        #expect(database.statistics.invalidUTF8FilesSkipped == 0)
+        #expect(database.statistics.symbolicLinksSkipped == 0)
+        #expect(database.issues.isEmpty)
     }
 }

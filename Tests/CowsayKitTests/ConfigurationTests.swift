@@ -978,4 +978,68 @@ struct EngineTests {
         #expect(engine.nextBlock(preview: true) == block, "preview content must not vary")
         #expect(engine.nextBlock(preview: true) == block)
     }
+
+    /// More resource-specific problems than the 50-detail cap must still leave the
+    /// complete structured count intact, while the logged sequence stays bounded, names
+    /// what was suppressed, and never echoes any fixture content back.
+    @Test func moreThanFiftyResourceProblemsStayBoundedWithACompleteCountAndNoContentLeak() throws {
+        let fortuneDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cowsaver-engine-diagnostics-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: fortuneDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fortuneDirectory) }
+        for index in 0 ..< 60 {
+            try Data([0xFF, 0xFE]).write(to: fortuneDirectory.appendingPathComponent("bad\(index)"))
+        }
+
+        let engine = CowsaverEngine(
+            configuration: Configuration(),
+            cowDirectories: [resources.appendingPathComponent("cows")],
+            fortuneDirectories: [fortuneDirectory],
+            seed: 8
+        )
+
+        #expect(engine.diagnostics.fortuneStatistics.invalidUTF8FilesSkipped == 60,
+                "the structured count stays complete even past the logging cap")
+        let resourceDetailLines = engine.diagnostics.messages.filter { $0.contains("invalid UTF-8") }
+        #expect(resourceDetailLines.count == 50)
+        #expect(engine.diagnostics.messages.contains {
+            $0.contains("10 additional resource-specific detail")
+        })
+        #expect(engine.diagnostics.messages.allSatisfy { !$0.contains("0xFF") && !$0.contains("ÿ") })
+        #expect(engine.diagnostics.usingBuiltInFortunes,
+                "a wholly invalid personal collection still falls back to the built-in set")
+    }
+
+    /// The same authoritative sequence carries a rejected cowfile, a fortune loader
+    /// recovery event, and a fallback note together, with nothing repeated between them.
+    @Test func messagesCombineCowfileFortuneAndFallbackCategoriesWithoutDuplicates() throws {
+        let cows = try cowFixtureDirectory([])
+        defer { try? FileManager.default.removeItem(at: cows) }
+        // Real Perl beyond the supported static heredoc form (see CoreTests.rejectsCowfilesCarryingRealPerl).
+        try Data("$extra = chop($eyes);\n$the_cow = <<EOC;\nx\nEOC\n".utf8).write(
+            to: cows.appendingPathComponent("broken").appendingPathExtension("cow")
+        )
+
+        let fortuneDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cowsaver-engine-messages-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: fortuneDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fortuneDirectory) }
+        try Data([0xFF]).write(to: fortuneDirectory.appendingPathComponent("bad"))
+
+        let engine = CowsaverEngine(
+            configuration: Configuration(), cowDirectories: [cows],
+            fortuneDirectories: [fortuneDirectory], seed: 9
+        )
+
+        #expect(engine.diagnostics.usingBuiltInCow)
+        #expect(engine.diagnostics.usingBuiltInFortunes)
+        #expect(!engine.diagnostics.cowfilesRejected.isEmpty)
+        #expect(engine.diagnostics.messages.contains { $0.contains("cowfile broken:") })
+        #expect(engine.diagnostics.messages.contains { $0.contains("bad") && $0.contains("invalid UTF-8") })
+        #expect(engine.diagnostics.messages.contains { $0 == "no fortunes found; using the built-in set" })
+        #expect(engine.diagnostics.messages.allSatisfy { !$0.contains("chop") && !$0.contains("$extra") },
+                "the rejected cowfile's own source line must never appear")
+        #expect(Set(engine.diagnostics.messages).count == engine.diagnostics.messages.count,
+                "no message should be duplicated across categories")
+    }
 }
