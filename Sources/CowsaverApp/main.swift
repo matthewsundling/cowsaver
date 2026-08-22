@@ -280,6 +280,13 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
             self?.applySaved(updated)
         }
+        // This is only the initial hint: no sheet parent ever attaches in this standalone
+        // path, so once shown, the window's own screen takes over as the authoritative
+        // source. `NSScreen.main` is the last resort, for when neither a key nor a main
+        // window exists yet (the `--configure` launch path) — this app owns the unparented
+        // window's location outright, so that fallback is appropriate here.
+        let screen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
+        sheet.prepareForPresentation(on: screen)
         settings = sheet   // nothing else retains it while it is on screen
         sheet.window.center()
         sheet.window.makeKeyAndOrderFront(nil)

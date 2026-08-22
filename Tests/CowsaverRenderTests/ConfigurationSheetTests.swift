@@ -182,7 +182,9 @@ struct ConfigurationSheetTests {
     }
 
     /// A screen without room for the whole sheet gets a shorter window with its controls
-    /// scrolling, not a window whose buttons sit past the bottom edge (issue #16).
+    /// scrolling, not a window whose buttons sit past the bottom edge (issue #16). A later
+    /// recap to a different short cap — what a screen change delivers in production — must
+    /// keep the same guarantee, not just the initial construction-time value.
     @Test func aScreenTooShortForTheSheetCapsItAndKeepsTheButtonsInside() throws {
         let cap: CGFloat = 500
         let sheet = makeSheet(cappedAt: cap)
@@ -193,10 +195,21 @@ struct ConfigurationSheetTests {
         let ok = sheet.okButton.convert(sheet.okButton.bounds, to: content)
         #expect(content.bounds.contains(ok),
                 "OK at \(ok) is outside the window's \(content.bounds)")
+
+        let recap = cap - 50
+        sheet.applyContentHeight(maximum: recap)
+        content.layoutSubtreeIfNeeded()
+
+        #expect(content.frame.height <= recap,
+                "\(content.frame.height) is taller than the recapped screen")
+        let recappedOK = sheet.okButton.convert(sheet.okButton.bounds, to: content)
+        #expect(content.bounds.contains(recappedOK),
+                "OK at \(recappedOK) is outside the recapped window's \(content.bounds)")
     }
 
     /// The error footer grows the fixed bottom cluster, not the window: a save failure must
-    /// not push the button row (or the message itself) past the same short-screen cap.
+    /// not push the button row (or the message itself) past the same short-screen cap, and a
+    /// later recap — a screen change while the error is still showing — must not either.
     @Test func aVisibleErrorFooterUnderTheShortScreenCapStaysInsideTheWindow() throws {
         let cap: CGFloat = 500
         let persistence = Persistence([.failed("permission denied")])
@@ -208,14 +221,23 @@ struct ConfigurationSheetTests {
         let content = try #require(sheet.window.contentView)
         content.layoutSubtreeIfNeeded()
 
-        #expect(content.frame.height <= cap, "\(content.frame.height) is taller than the screen")
         let controls: [NSView] = [sheet.errorLabel, sheet.restoreButton, sheet.cancelButton,
                                   sheet.okButton]
-        for control in controls {
-            let frame = control.convert(control.bounds, to: content)
-            #expect(content.bounds.contains(frame),
-                    "\(control) at \(frame) is outside the window's \(content.bounds)")
+        func assertControlsAreInside(_ cap: CGFloat, why: String) {
+            #expect(content.frame.height <= cap,
+                    "\(why): \(content.frame.height) is taller than the screen")
+            for control in controls {
+                let frame = control.convert(control.bounds, to: content)
+                #expect(content.bounds.contains(frame),
+                        "\(why): \(control) at \(frame) is outside the window's \(content.bounds)")
+            }
         }
+        assertControlsAreInside(cap, why: "at construction")
+
+        let recap = cap - 50
+        sheet.applyContentHeight(maximum: recap)
+        content.layoutSubtreeIfNeeded()
+        assertControlsAreInside(recap, why: "after recapping with the error still visible")
     }
 
     /// The cap is a limit, not a size: with room to spare the window is exactly as tall as
@@ -227,6 +249,89 @@ struct ConfigurationSheetTests {
         #expect(capped.frame.height == natural.frame.height)
         #expect(natural.frame.height > 500,
                 "the cap above only means something if 500 actually clamps")
+    }
+
+    // MARK: - Presentation sizing lifecycle
+
+    /// `selectedMaximumContentHeight` is the pure precedence seam recapping is built on: an
+    /// attached parent outranks the sheet's own visible screen, which outranks the initial
+    /// front-end hint, which outranks having no cap at all. Numeric heights stand in for
+    /// screens so this needs no real display and no fake `NSScreen`.
+    @Test func selectionPrecedenceFavoursParentThenVisibleWindowThenTheInitialHint() {
+        let allowance: CGFloat = 120
+
+        let parentWins = ConfigurationSheet.selectedMaximumContentHeight(
+            parentVisibleHeight: 900, visibleWindowHeight: 800, hintVisibleHeight: 700)
+        #expect(parentWins == 900 - allowance,
+                "an attached parent wins over everything else, less the 120-point allowance")
+
+        let visibleWindowWins = ConfigurationSheet.selectedMaximumContentHeight(
+            parentVisibleHeight: nil, visibleWindowHeight: 800, hintVisibleHeight: 700)
+        #expect(visibleWindowWins == 800 - allowance,
+                "without a parent, the sheet's own visible window wins over the initial hint")
+
+        let hintWins = ConfigurationSheet.selectedMaximumContentHeight(
+            parentVisibleHeight: nil, visibleWindowHeight: nil, hintVisibleHeight: 700)
+        #expect(hintWins == 700 - allowance, "before either exists, the initial presentation hint wins")
+
+        let noCap = ConfigurationSheet.selectedMaximumContentHeight(
+            parentVisibleHeight: nil, visibleWindowHeight: nil, hintVisibleHeight: nil)
+        #expect(noCap == nil, "with no candidate screen at all there is no cap, not zero and not a guess")
+    }
+
+    /// Construction must not silently fall back to a global screen: with no injected cap at
+    /// all (the constructor's own default, not an explicitly passed nil), the window is built
+    /// at its natural height. This must hold on any Mac, with any number of displays.
+    @Test func constructionWithNoInjectedCapUsesNaturalHeightRegardlessOfAnyScreen() throws {
+        let sheet = ConfigurationSheet(configuration: Configuration(), cowfileNames: cowfileNames,
+                                       persister: { _ in .saved }) { _ in }
+        let content = try #require(sheet.window.contentView)
+        content.layoutSubtreeIfNeeded()
+
+        let natural = try #require(makeSheet(cappedAt: nil).window.contentView)
+        #expect(content.frame.height == natural.frame.height)
+    }
+
+    /// A short cap shrinks the window; a later, taller maximum must restore exactly the
+    /// natural height recorded at construction, not merely grow from the reduced height.
+    @Test func aShortCapThenATallMaximumShrinksThenRestoresExactlyTheNaturalHeight() throws {
+        let sheet = makeSheet(cappedAt: nil)
+        let content = try #require(sheet.window.contentView)
+        content.layoutSubtreeIfNeeded()
+        let natural = content.frame.height
+
+        sheet.applyContentHeight(maximum: 400)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.frame.height == 400, "a maximum below natural height caps it exactly")
+
+        sheet.applyContentHeight(maximum: 5000)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.frame.height == natural,
+                "a maximum above natural height restores it exactly, not the reduced height")
+    }
+
+    /// Recapping is reversible in both directions: a tall maximum leaves the natural height
+    /// alone, and a later, shorter one still shrinks it — proving this is always
+    /// `min(naturalHeight, maximum)`, not a one-way `min` against whatever height the window
+    /// was already reduced to.
+    @Test func recappingShrinksAgainRatherThanStayingAtAnEarlierReducedHeight() throws {
+        let sheet = makeSheet(cappedAt: nil)
+        let content = try #require(sheet.window.contentView)
+        content.layoutSubtreeIfNeeded()
+        let natural = content.frame.height
+
+        sheet.applyContentHeight(maximum: 5000)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.frame.height == natural, "a maximum with room to spare changes nothing")
+
+        sheet.applyContentHeight(maximum: 400)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.frame.height == 400)
+
+        sheet.applyContentHeight(maximum: 300)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.frame.height == 300,
+                "a still shorter maximum keeps shrinking rather than sticking at 400")
     }
 
     // MARK: - Save transaction
