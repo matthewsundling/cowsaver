@@ -41,6 +41,9 @@ jobs:
         # Check the rendering-framework and portable-core boundaries before building.
         run: make check
 
+      - name: Test diagnostic tooling
+        run: make test-diagnostics
+
       - name: Test
         run: swift test
 
