@@ -27,7 +27,7 @@ Cowsaver does not override `animateOneFrame()`. `RotationCoordinator` schedules 
 
 ### Keep `CowsayKit` Foundation-only
 
-`CowsayKit` must not import AppKit, Cocoa, ScreenSaver, CoreGraphics, QuartzCore, SwiftUI, or CryptoKit. Configuration, parsing, selection, and rendering behavior remain testable in the portable core; platform-specific code belongs in `CowsaverRender` or a front end. `make check` enforces the framework boundary.
+`CowsayKit` must not import AppKit, Cocoa, ScreenSaver, CoreGraphics, QuartzCore, SwiftUI, or CryptoKit. Configuration, parsing, selection, and rendering behavior remain testable in the portable core; shared rendering platform code belongs in `CowsaverRender`, while standalone app-only platform code belongs in `CowsaverAppSupport` or the app front end. `make check` enforces the framework boundary.
 
 SHA-256 is implemented in the core rather than imported from CryptoKit so the core remains Foundation-only.
 
