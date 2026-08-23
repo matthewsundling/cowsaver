@@ -300,6 +300,76 @@ struct ConfigurationTests {
         #expect(!result.warnings.isEmpty)
     }
 
+    @Test func configurationFileStatesAreDistinctAndComparable() {
+        let readable = ConfigurationFileState.readable(Data("{}".utf8))
+        #expect(ConfigurationFileState.missing != .unreadable)
+        #expect(ConfigurationFileState.missing != .oversized)
+        #expect(ConfigurationFileState.unreadable != .oversized)
+        #expect(readable != .missing)
+        #expect(readable == .readable(Data("{}".utf8)))
+        #expect(readable != .readable(Data("{\"wrapWidth\": 60}".utf8)))
+    }
+
+    @Test func aConfigurationExactlyAtTheByteLimitIsAccepted() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cowsaver-config-limit-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let json = "{\"wrapWidth\":60}"
+        let data = Data((json + String(repeating: " ", count: Configuration.maximumFileBytes - json.utf8.count)).utf8)
+        #expect(data.count == Configuration.maximumFileBytes)
+        try data.write(to: url)
+
+        let result = Configuration.load(contentsOf: url)
+        #expect(result.configuration.wrapWidth == 60)
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func aConfigurationOneByteOverTheLimitIsRejectedBeforeParsing() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cowsaver-config-oversized-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(repeating: 0x7B, count: Configuration.maximumFileBytes + 1).write(to: url)
+
+        let result = Configuration.load(contentsOf: url)
+        #expect(result.configuration == Configuration())
+        #expect(result.warnings == [
+            "config file at \(url.path) exceeds the 65536-byte limit; using defaults"
+        ])
+    }
+
+    @Test func boundedConfigurationReaderAcceptsShortChunksThroughCleanEOF() {
+        let expected = Data("{\"wrapWidth\":60}".utf8)
+        var offset = 0
+        let state = Configuration.fileState(readingChunks: { requested in
+            guard offset < expected.count else { return nil }
+            let end = min(offset + min(3, requested), expected.count)
+            defer { offset = end }
+            return expected[offset ..< end]
+        })
+        #expect(state == .readable(expected))
+    }
+
+    @Test func boundedConfigurationReaderReportsReadFailureInsteadOfUsingAPartialPrefix() {
+        var calls = 0
+        let state = Configuration.fileState(readingChunks: { _ in
+            calls += 1
+            if calls == 1 { return Data("{".utf8) }
+            throw CocoaError(.fileReadUnknown)
+        })
+        #expect(state == .unreadable)
+    }
+
+    @Test func boundedConfigurationReaderRetainsOnlyTheOverflowSentinel() {
+        var bytesSupplied = 0
+        let state = Configuration.fileState(readingChunks: { requested in
+            let chunk = Data(repeating: 0x20, count: requested)
+            bytesSupplied += chunk.count
+            return chunk
+        })
+        #expect(state == .oversized)
+        #expect(bytesSupplied == Configuration.maximumFileBytes + 1)
+    }
+
     // MARK: Clamping
 
     @Test(arguments: [(0.0, 1.0), (-5.0, 1.0), (0.001, 1.0), (45.0, 45.0), (1e9, 600.0)])
