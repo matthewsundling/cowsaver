@@ -19,6 +19,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Changed
 
+- Configuration loading is bounded to 64 KiB and now reports unreadable or oversized
+  `config.json` files while recovering with built-in defaults.
 - `make doctor` now reports a missing `cowsay` deliberately and identifies the installed saver's
   build environment, configuration search order, and configuration warnings.
 - Idle monitoring now lives in app-only support, removing the saver's direct IOKit framework

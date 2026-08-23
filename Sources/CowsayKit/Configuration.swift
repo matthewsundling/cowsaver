@@ -1,6 +1,18 @@
 import CoreFoundation
 import Foundation
 
+/// The bounded outcome of reading `config.json`.
+///
+/// Front ends keep this value to distinguish a missing file from an existing file that
+/// cannot be read or exceeds the configuration byte limit. `readable` retains only an
+/// accepted file; oversized input is discarded after its one-byte overflow sentinel.
+public enum ConfigurationFileState: Equatable, Sendable {
+    case missing
+    case readable(Data)
+    case unreadable
+    case oversized
+}
+
 /// A color, kept here rather than in the AppKit layer.
 ///
 /// This lets it be parsed and tested without a window server.
@@ -262,6 +274,9 @@ private func parseFace(_ value: String) -> ParsedFace {
 // MARK: - Loading
 
 public extension Configuration {
+    /// The largest accepted `config.json`, in bytes.
+    internal static let maximumFileBytes = 64 * 1024
+
     struct LoadResult: Sendable {
         public let configuration: Configuration
         /// Human-readable notes about anything ignored. The screensaver logs these; it
@@ -274,14 +289,75 @@ public extension Configuration {
         }
     }
 
-    /// Parse a config file. Missing, unreadable, malformed, and partially invalid input
-    /// yields usable defaults plus warnings.
+    /// Read and parse a config file. Missing, unreadable, oversized, malformed, and partially
+    /// invalid input yields usable defaults plus warnings.
     static func load(contentsOf url: URL) -> LoadResult {
-        guard let data = FileManager.default.contents(atPath: url.path) else {
+        load(fileState: fileState(at: url), at: url)
+    }
+
+    /// Convert a previously observed file state into configuration and diagnostics. Keeping
+    /// this separate from `fileState(at:)` lets a reused saver compare the complete state
+    /// before deciding whether it needs to rebuild its content engine.
+    static func load(fileState: ConfigurationFileState, at url: URL) -> LoadResult {
+        switch fileState {
+        case .missing:
             return LoadResult(configuration: Configuration(),
                               warnings: ["no config file at \(url.path); using defaults"])
+        case .unreadable:
+            return LoadResult(
+                configuration: Configuration(),
+                warnings: ["config file at \(url.path) is unreadable; using defaults"]
+            )
+        case .oversized:
+            return LoadResult(
+                configuration: Configuration(),
+                warnings: [
+                    "config file at \(url.path) exceeds the \(maximumFileBytes)-byte limit; "
+                        + "using defaults"
+                ]
+            )
+        case .readable(let data):
+            return load(data: data)
         }
-        return load(data: data)
+    }
+
+    /// Read `config.json` without retaining more than one byte past the accepted limit.
+    /// Metadata is deliberately not consulted: the file can grow or report a stale size
+    /// while it is being read.
+    static func fileState(at url: URL) -> ConfigurationFileState {
+        guard let handle = FileHandle(forReadingAtPath: url.path) else {
+            return FileManager.default.fileExists(atPath: url.path) ? .unreadable : .missing
+        }
+        defer { try? handle.close() }
+        return fileState(readingChunks: { remaining in
+            try handle.read(upToCount: remaining)
+        })
+    }
+
+    /// The chunk seam proves the reader's bound without depending on filesystem metadata or
+    /// permission behavior, which can vary for a privileged test process.
+    internal static func fileState(
+        readingChunks readChunk: (Int) throws -> Data?
+    ) -> ConfigurationFileState {
+        let sentinelLimit = maximumFileBytes + 1
+        var data = Data()
+
+        do {
+            while data.count < sentinelLimit {
+                let remaining = sentinelLimit - data.count
+                guard let chunk = try readChunk(remaining), !chunk.isEmpty else { break }
+
+                // `FileHandle.read(upToCount:)` honours its count, but retaining only this
+                // prefix also preserves the bound if a test or future reader violates it.
+                let admitted = chunk.prefix(remaining)
+                data.append(admitted)
+                if chunk.count > remaining { return .oversized }
+            }
+        } catch {
+            return .unreadable
+        }
+
+        return data.count > maximumFileBytes ? .oversized : .readable(data)
     }
 
     static func load(data: Data) -> LoadResult {

@@ -18,10 +18,11 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     private var content: CowsaverContentView?
     private var engine: CowsaverEngine?
     private var configuration = Configuration()
-    /// The config file content `configuration` was decoded from, or nil when there was no
-    /// readable file. A reused view compares against this to tell an edited file from the
-    /// one already in effect.
-    private var configurationData: Data?
+    /// The complete config-file state `configuration` was decoded from. A reused view must
+    /// distinguish absence from an existing unreadable or oversized file as well as compare
+    /// readable contents.
+    private var configurationFileState: ConfigurationFileState = .missing
+    private var configurationURL: URL?
     private var isRegistered = false
 
     // MARK: Lifecycle
@@ -40,7 +41,8 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
         let file = Self.configurationFile()
         let resolved = Self.resolveConfiguration(file)
-        configurationData = file?.data
+        configurationFileState = file.state
+        configurationURL = file.url
         configuration = resolved.configuration
         for warning in resolved.warnings { log(warning) }
 
@@ -166,9 +168,12 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
             guard let self else { return }
             self.configuration = updated
-            // Take the file content the sheet just wrote, so the next activation does not
-            // re-apply a configuration that has already arrived through this path.
-            self.configurationData = Self.configurationFile()?.data
+            // Take the complete state of the file the sheet just wrote, so the next
+            // activation does not re-apply a configuration that has already arrived through
+            // this path.
+            let file = Self.configurationFile()
+            self.configurationFileState = file.state
+            self.configurationURL = file.url
             self.content?.apply(configuration: updated)
             self.rebuildEngine()
             // Re-register so a changed rotation interval takes effect in this host process,
@@ -208,21 +213,22 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     // MARK: Configuration
 
-    /// Re-read `config.json` when its content differs from what this view last loaded.
+    /// Re-read `config.json` when its complete state differs from what this view last loaded.
     ///
     /// The legacy host can reuse a view across activations, and a view that resolves its
     /// configuration only in `init` keeps its birth configuration forever, so an edited file
-    /// reaches nothing but a freshly created view (issue #10). Content rather than mtime:
-    /// the file is a few hundred bytes, and byte equality has no clock-granularity edge
-    /// cases.
+    /// reaches nothing but a freshly created view (issue #10). State and content rather than
+    /// mtime: this catches missing/unreadable/oversized transitions without clock-granularity
+    /// edge cases.
     ///
     /// Applies the result the way the sheet's save path does. `startAnimation` renders after
     /// this returns, immediately for a preview and a runloop turn later otherwise, so there
     /// is no rotation to ask for here.
     private func reloadConfigurationIfChanged() {
         let file = Self.configurationFile()
-        guard file?.data != configurationData else { return }
-        configurationData = file?.data
+        guard file.state != configurationFileState || file.url != configurationURL else { return }
+        configurationFileState = file.state
+        configurationURL = file.url
 
         let resolved = Self.resolveConfiguration(file)
         log("config.json changed since this view loaded it; reloading")
@@ -237,30 +243,23 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
         }
     }
 
-    /// The config file in the search order and its content. Nil when there is no file at
-    /// all; nil content when the file exists but could not be read.
-    private static func configurationFile() -> (url: URL, data: Data?)? {
-        guard let url = ResourceLocations.configurationURL() else { return nil }
-        return (url, FileManager.default.contents(atPath: url.path))
+    /// The config file in the search order and its complete bounded read state.
+    private static func configurationFile() -> (url: URL?, state: ConfigurationFileState) {
+        guard let url = ResourceLocations.configurationURL() else { return (nil, .missing) }
+        return (url, Configuration.fileState(at: url))
     }
 
     /// `config.json` is the whole configuration; there is no second store layered under it.
     ///
-    /// `Configuration.load` already warns about a malformed file. No file at all is the
-    /// ordinary case and says nothing; a file that exists but cannot be read warns here.
+    /// `Configuration.load` already warns about malformed, unreadable, and oversized files.
+    /// No file at all is the ordinary case for the saver and says nothing.
     private static func resolveConfiguration(
-        _ file: (url: URL, data: Data?)?
+        _ file: (url: URL?, state: ConfigurationFileState)
     ) -> Configuration.LoadResult {
-        guard let file else {
+        guard let url = file.url else {
             return Configuration.LoadResult(configuration: Configuration(), warnings: [])
         }
-        guard let data = file.data else {
-            return Configuration.LoadResult(
-                configuration: Configuration(),
-                warnings: ["config.json at \(file.url.path) is unreadable; using defaults"]
-            )
-        }
-        return Configuration.load(data: data)
+        return Configuration.load(fileState: file.state, at: url)
     }
 
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "saver")
