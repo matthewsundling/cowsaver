@@ -79,7 +79,7 @@ The [configuration reference](docs/configuration.md) documents every key, its de
 
 Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4; the four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The [configuration reference](docs/configuration.md) lists the 47 names.
 
-The screensaver's Options sheet and the app's settings window are two views of the same window, and both write `config.json` — there is no second store. An invalid value in the file falls back to its default without preventing the screensaver from running; the settings window instead asks you to correct an invalid entry before it saves anything.
+The screensaver's Options sheet and the app's settings window are two views of the same window, and both write `config.json` — there is no second store. Wrong types and malformed values recover to their documented defaults without preventing the screensaver from running; finite numeric values outside a supported range clamp to the nearest bound. The settings window instead asks you to correct an invalid entry before it saves anything.
 
 ## The standalone app
 

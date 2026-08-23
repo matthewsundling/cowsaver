@@ -47,11 +47,17 @@ func printDefaultConfig() -> Never {
 /// explicitly; searching the default locations and finding nothing is normal.
 func validateConfig(path: String?) -> Never {
     if let path {
-        guard let data = FileManager.default.contents(atPath: path) else {
+        let url = URL(fileURLWithPath: path)
+        let state = Configuration.fileState(at: url)
+        switch state {
+        case .missing:
             fail("no config file at \(path)")
+        case .unreadable:
+            fail("config file at \(path) is unreadable")
+        case .readable, .oversized:
+            printValidation(Configuration.load(fileState: state, at: url))
+            exit(0)
         }
-        printValidation(Configuration.load(data: data))
-        exit(0)
     }
 
     emit(Bytes.from("config search order:\n"))
@@ -62,11 +68,16 @@ func validateConfig(path: String?) -> Never {
         if exists, found == nil { found = candidate }
         emit(Bytes.from("  \(exists ? "*" : " ") \(candidate.path)\n"))
     }
-    guard let found, let data = FileManager.default.contents(atPath: found.path) else {
+    guard let found else {
         emit(Bytes.from("no config file found; the saver uses built-in defaults\n"))
         exit(0)
     }
-    printValidation(Configuration.load(data: data))
+    let state = Configuration.fileState(at: found)
+    if case .missing = state {
+        emit(Bytes.from("no config file found; the saver uses built-in defaults\n"))
+        exit(0)
+    }
+    printValidation(Configuration.load(fileState: state, at: found))
     exit(0)
 }
 
