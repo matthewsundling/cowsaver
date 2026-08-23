@@ -22,6 +22,11 @@ Cowsaver searches two directories, in order, and uses the first `config.json` it
 The files are not merged. A config file in the container directory means the one in
 Application Support is never read.
 
+`config.json` may be at most 64 KiB (65,536 bytes). Cowsaver reads only enough to detect one
+additional byte, so an oversized file is not parsed or retained in full; it logs that the file
+exceeded the limit and runs with the built-in defaults. An unreadable file recovers the same
+way. A missing file in the normal search order is quiet and also uses the built-in defaults.
+
 The container path comes first because it is the one directory both front ends resolve to
 the same file. The `.saver` runs inside `legacyScreenSaver.appex`, where the home directory
 *is* the container; the standalone app sees your real home directory and appends the
