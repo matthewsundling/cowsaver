@@ -530,10 +530,11 @@ public final class ConfigurationSheet: NSObject {
 
     @objc private func revealConfiguration() {
         let url = ResourceLocations.canonicalConfigurationURL()
-        // A sandboxed host may refuse to hand the request to Finder, and there is nothing
-        // useful to say about that in the window; the log line is the whole report.
+        // A missing file has nothing for Finder to select. Keep the diagnostic log and tell
+        // the person that OK is the action that creates the canonical configuration file.
         guard FileManager.default.fileExists(atPath: url.path) else {
             log("no config.json to reveal at \(url.path); click OK to write one")
+            showSaveError("No config.json exists yet. Click OK to create it.")
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting([url])
