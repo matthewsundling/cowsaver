@@ -42,7 +42,7 @@ public final class ConfigurationSheet: NSObject {
     private(set) var cowfileBoxes: [NSButton] = []
 
     /// Shown when raw `foreground` and `background` values are active instead of a preset.
-    private let customColoursTitle = "custom colours"
+    private let customColorsTitle = "custom colors"
 
     /// The `sizeVariation` the controls were built from. Checking the box hands back a
     /// hand-edited value rather than replacing it with the amount below.
@@ -131,7 +131,7 @@ public final class ConfigurationSheet: NSObject {
 
         themePopup = NSPopUpButton()
         themePopup.addItems(withTitles: ThemePreset.all.map(\.name))
-        themePopup.addItem(withTitle: customColoursTitle)
+        themePopup.addItem(withTitle: customColorsTitle)
 
         stylePopup = NSPopUpButton()
         stylePopup.addItems(withTitles: ["say", "think"])
@@ -399,7 +399,7 @@ public final class ConfigurationSheet: NSObject {
         if let theme = configuration.theme, ThemePreset.named(theme) != nil {
             themePopup.selectItem(withTitle: theme)
         } else {
-            themePopup.selectItem(withTitle: customColoursTitle)
+            themePopup.selectItem(withTitle: customColorsTitle)
         }
         stylePopup.selectItem(withTitle: configuration.balloonStyle)
 
@@ -481,7 +481,7 @@ public final class ConfigurationSheet: NSObject {
         candidate.fontSize = fontSize
 
         let selectedTheme = themePopup.titleOfSelectedItem
-        candidate.theme = selectedTheme == customColoursTitle ? nil : selectedTheme
+        candidate.theme = selectedTheme == customColorsTitle ? nil : selectedTheme
         candidate.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
         candidate.adaptiveWrap = adaptiveWrapBox.state == .on
         candidate.randomCow = randomCowBox.state == .on

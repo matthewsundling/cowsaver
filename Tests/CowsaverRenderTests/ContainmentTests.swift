@@ -43,7 +43,7 @@ struct ContainmentTests {
     /// The pixels, not just the geometry.
     ///
     /// A frame inside the bounds proves nothing if the layer draws outside it, so this samples
-    /// the outer two pixels the way the existing rendering tests sample colour. The 8x8 canvas
+    /// the outer two pixels the way the existing rendering tests sample color. The 8x8 canvas
     /// is left out: its image is all edge, and a two-pixel margin there has nothing to say.
     @Test(arguments: [CGSize(width: 290, height: 165), CGSize(width: 200, height: 120)])
     func aWorstCaseBlockLeavesTheOuterMarginBlank(size: CGSize) throws {
@@ -52,7 +52,7 @@ struct ContainmentTests {
         let image = result.image
         var lit: [String] = []
         func sample(_ x: Int, _ y: Int) {
-            if let colour = image.colorAt(x: x, y: y), colour.greenComponent > 0.3 {
+            if let color = image.colorAt(x: x, y: y), color.greenComponent > 0.3 {
                 lit.append("(\(x),\(y))")
             }
         }

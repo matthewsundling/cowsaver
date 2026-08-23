@@ -8,7 +8,7 @@ import Testing
 ///
 /// These assert stable layout properties instead of comparing committed PNG bytes. Text
 /// rasterization varies across macOS versions and display scales, while bitmap dimensions,
-/// fitted size, placement, and configured colours remain useful regression signals.
+/// fitted size, placement, and configured colors remain useful regression signals.
 ///
 /// `.serialized` and `@MainActor` keep AppKit view construction and layer rendering on the
 /// main thread while swift-testing runs the broader suite concurrently.
@@ -45,7 +45,7 @@ struct ImageRenderTests {
         var litPixels = 0
         for x in stride(from: 0, to: result.image.pixelsWide, by: 4) {
             for y in stride(from: 0, to: result.image.pixelsHigh, by: 4) {
-                if let colour = result.image.colorAt(x: x, y: y), colour.greenComponent > 0.3 {
+                if let color = result.image.colorAt(x: x, y: y), color.greenComponent > 0.3 {
                     litPixels += 1
                 }
             }
@@ -112,7 +112,7 @@ struct ImageRenderTests {
     }
 
     /// The theme reaches the pixels, not just the config struct.
-    @Test func themeColoursAreApplied() throws {
+    @Test func themeColorsAreApplied() throws {
         var amber = Configuration()
         amber.theme = "amber"
         let result = try #require(ImageRenderer.render(block: sampleBlock(),
@@ -120,9 +120,9 @@ struct ImageRenderTests {
         var sawAmber = false
         for x in stride(from: 0, to: result.image.pixelsWide, by: 2) {
             for y in stride(from: 0, to: result.image.pixelsHigh, by: 2) {
-                if let colour = result.image.colorAt(x: x, y: y),
-                   colour.redComponent > 0.8, colour.greenComponent > 0.4,
-                   colour.blueComponent < 0.2 {
+                if let color = result.image.colorAt(x: x, y: y),
+                   color.redComponent > 0.8, color.greenComponent > 0.4,
+                   color.blueComponent < 0.2 {
                     sawAmber = true
                 }
             }
@@ -136,7 +136,7 @@ struct ImageRenderTests {
     /// layout bug. `CALayer.render(in:)` happens to draw `borderWidth`/
     /// `borderColor`, unlike some other layer effects (shadows, masks), so this can
     /// assert directly on pixels rather than only on the flag's plumbing.
-    @Test func debugFrameDrawsBorderColouredPixels() throws {
+    @Test func debugFrameDrawsBorderColoredPixels() throws {
         var configuration = Configuration()
         configuration.debugFrame = true
         let result = try #require(ImageRenderer.render(block: sampleBlock(),
@@ -144,8 +144,8 @@ struct ImageRenderTests {
 
         var sawRedBoundsEdge = false
         for x in stride(from: 0, to: result.image.pixelsWide, by: 4) {
-            if let colour = result.image.colorAt(x: x, y: 0),
-               colour.redComponent > 0.8, colour.greenComponent < 0.2, colour.blueComponent < 0.2 {
+            if let color = result.image.colorAt(x: x, y: 0),
+               color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2 {
                 sawRedBoundsEdge = true
                 break
             }
@@ -155,8 +155,8 @@ struct ImageRenderTests {
         var sawBlueTextBorder = false
         for x in stride(from: 0, to: result.image.pixelsWide, by: 2) {
             for y in stride(from: 0, to: result.image.pixelsHigh, by: 2) {
-                if let colour = result.image.colorAt(x: x, y: y),
-                   colour.blueComponent > 0.8, colour.redComponent < 0.2, colour.greenComponent < 0.2 {
+                if let color = result.image.colorAt(x: x, y: y),
+                   color.blueComponent > 0.8, color.redComponent < 0.2, color.greenComponent < 0.2 {
                     sawBlueTextBorder = true
                 }
             }

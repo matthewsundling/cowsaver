@@ -336,16 +336,16 @@ struct ConfigurationTests {
         #expect(result.warnings.contains { $0.contains("sizeVariation") })
     }
 
-    // MARK: Colours and themes
+    // MARK: Colors and themes
 
     @Test(arguments: ["#33FF66", "33FF66", "#3F6", "3f6"])
-    func parsesHexColours(hex: String) {
+    func parsesHexColors(hex: String) {
         #expect(ThemeColor(hex: hex) != nil)
     }
 
     @Test(arguments: ["", "#12", "#1234", "#12345", "#1234567", "zzzzzz", "#GGGGGG",
                       "rgb(1,2,3)", " #123", "#123 ", "##123"])
-    func rejectsBadHexColours(hex: String) {
+    func rejectsBadHexColors(hex: String) {
         #expect(ThemeColor(hex: hex) == nil)
     }
 
@@ -397,7 +397,7 @@ struct ConfigurationTests {
         #expect(result.warnings.count == 1)
     }
 
-    @Test func namedThemeOverridesRawColours() {
+    @Test func namedThemeOverridesRawColors() {
         var configuration = Configuration()
         configuration.foreground = "#FFFFFF"
         configuration.theme = "amber"
@@ -729,7 +729,7 @@ struct ConfigurationTests {
         #expect(NSDictionary(dictionary: result.configuration.jsonObject).isEqual(to: object))
     }
 
-    /// An unset theme means "use my own colours". Writing it as "" would both warn on every
+    /// An unset theme means "use my own colors". Writing it as "" would both warn on every
     /// load and make that state impossible to express.
     @Test func anUnsetThemeIsOmittedRatherThanWrittenEmpty() {
         var configuration = Configuration()
@@ -761,9 +761,9 @@ struct ConfigurationTests {
         #expect(Set(Configuration.knownKeys).count == Configuration.knownKeys.count)
     }
 
-    /// A named theme supplies both colours, so the default one has to step aside for a file
-    /// that states colours of its own.
-    @Test func coloursInTheFileBeatTheDefaultTheme() {
+    /// A named theme supplies both colors, so the default one has to step aside for a file
+    /// that states colors of its own.
+    @Test func colorsInTheFileBeatTheDefaultTheme() {
         let result = Configuration.load(object: ["foreground": "#FF0000"])
         #expect(result.configuration.theme == nil)
         #expect(result.configuration.resolvedForeground.red > 0.9)

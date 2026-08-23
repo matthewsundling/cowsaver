@@ -59,7 +59,7 @@ A key the file does not hold takes Cowsaver's built-in default; nothing else is 
 underneath.
 
 A setting only takes effect once `config.json` has actually been written. A successful save
-updates the running view immediately — colours, content engine, and rotation. A failed write
+updates the running view immediately — colors, content engine, and rotation. A failed write
 (a full disk, a permissions problem) leaves the window open with every value intact and
 reports why, next to the buttons, without changing anything Cowsaver is showing; correcting
 the problem and clicking OK again retries with the values still in the window. A hand edit to
@@ -163,7 +163,7 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
 
 ### Appearance
 
-- **`theme`** names a preset, which supplies both colours. Cowsaver ships on
+- **`theme`** names a preset, which supplies both colors. Cowsaver ships on
   `green-phosphor`. Matching is case-insensitive.
 
   | Theme | Foreground | Background |
@@ -173,19 +173,19 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   | `paperwhite` | `#2B2B2B` | `#F5F2E8` |
   | `solarized-dark` | `#93A1A1` | `#002B36` |
 
-- **`foreground`** and **`background`** are your own colours. Each accepts exactly three or six
+- **`foreground`** and **`background`** are your own colors. Each accepts exactly three or six
   hexadecimal digits, with or without `#`; valid spelling and letter case are preserved. An
   invalid `foreground` warns and stores `#33FF66`, while an invalid `background` warns and stores
   `#000000`, independently of the other field. Setting either one without
-  also naming a `theme` drops the shipped preset, so the colours you wrote are the ones you
+  also naming a `theme` drops the shipped preset, so the colors you wrote are the ones you
   get. Naming a theme in the same file is how you ask for the preset instead; the preset
-  then supplies both resolved colours. The raw fields still have to be valid because they remain
+  then supplies both resolved colors. The raw fields still have to be valid because they remain
   persisted.
 
   Omitting all three appearance keys uses `green-phosphor` without warning. Omitting `theme`
-  while supplying either raw colour is the one spelling for custom colours. A present but empty,
+  while supplying either raw color is the one spelling for custom colors. A present but empty,
   null, wrongly typed, or unknown `theme` is invalid: it warns and uses `green-phosphor`, rather
-  than activating the raw colours. This is why a saved custom-colour file has no `theme` key.
+  than activating the raw colors. This is why a saved custom-color file has no `theme` key.
 - **`transition`** controls the 0.6-second crossfade between fortunes. It accepts `fade` or
   `none`; `none` turns the crossfade off.
 - **`face`** applies cowsay's face modes. It accepts full names — `borg`, `dead`, `greedy`,
@@ -240,7 +240,7 @@ on its own, so one bad value costs you that value and nothing else:
 - A non-array `cowfiles` warns and uses the default four names. Inside an array, bad entries and
   later duplicates are ignored individually, with their exact indices, while valid siblings stay.
 - A present `theme` that is not a preset warns and uses `green-phosphor`. Remove the key to use
-  raw custom colours.
+  raw custom colors.
 - A bad `foreground` or `background` warns and stores that field's default (`#33FF66` or
   `#000000`) without discarding a valid sibling.
 - Invalid `balloonStyle`, `transition`, `face`, and `fontName` values name the field, warn, and
@@ -274,7 +274,7 @@ To start from the shipped defaults instead of an existing file:
 ```
 
 That output has all 18 keys, `config.example.json` included. A file written by the settings
-window under *custom colours* has 17: Cowsaver omits an unset theme rather than writing it
+window under *custom colors* has 17: Cowsaver omits an unset theme rather than writing it
 empty, which leaves the raw `foreground` and `background` values in effect.
 
 ## The example file, annotated
@@ -304,7 +304,7 @@ with comments added:
   "reposition" : true,                 // false centres every fortune
   "rotationSeconds" : 45,              // whole seconds, 1-600
   "sizeVariation" : 0,                 // above 0, varies the fitted size per rotation
-  "theme" : "green-phosphor",          // remove this key to use the two colours above
+  "theme" : "green-phosphor",          // remove this key to use the two colors above
   "transition" : "fade",               // "none" disables the crossfade
   "weightByFile" : false,              // true gives each eligible source file an equal chance
   "wrapWidth" : 40                     // narrowest balloon, in whole columns, 2-500
