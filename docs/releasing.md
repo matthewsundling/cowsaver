@@ -6,14 +6,10 @@ and does not replace this procedure.
 
 ## 1. Record the release decisions
 
-Before preparing the release, record the chosen version (for example, `1.1.0`), its tag spelling
-(for example, `1.1.0`), the supported-version policy that will appear in `SECURITY.md`, and the
-release notes derived from the changelog. Record whether distribution remains source-only or
-includes a signed and notarized asset.
-
-The existing source-only release format has no downloadable assets. If an asset is chosen, use
-`scripts/sign-and-notarize.sh` deliberately, verify the resulting asset, and describe it
-accurately in the release. This procedure does not choose a distribution policy.
+Before preparing the release, record the product bundle version (for example, `1.1.0`), the tag
+and GitHub release name (for example, `1.1`), the supported-version policy that will appear in
+`SECURITY.md`, and the release notes derived from the changelog. Distribution is source-only:
+GitHub generates source archives, but the release has no manually attached assets or binary assets.
 
 ## 2. Prepare the release pull request
 
@@ -77,10 +73,10 @@ creating the tag.
 Create an annotated signed tag from the merged commit, using the recorded tag spelling:
 
 ```sh
-git tag -s 1.1.0 -m "Cowsaver 1.1.0" <merged-commit>
-git verify-tag 1.1.0
-git show --no-patch 1.1.0
-git push origin 1.1.0
+git tag -s 1.1 -m "Cowsaver 1.1" <merged-commit>
+git verify-tag 1.1
+git show --no-patch 1.1
+git push origin 1.1
 ```
 
 Replace the example version and commit with the recorded release values. Verify locally that the
@@ -88,10 +84,9 @@ tag is annotated, signed, and points to the merged commit before pushing it.
 
 ## 6. Publish the GitHub release
 
-Create a GitHub release for the pushed tag. Its title, notes, and tag must agree with the merged
-changelog. Do not imply a downloadable asset when the recorded distribution is source-only. If a
-signed and notarized asset was chosen, attach only the asset that was verified and state its form
-and verification accurately.
+Create a GitHub release named `1.1` for the pushed tag. Its notes must agree with the merged
+changelog. Keep the release source-only; GitHub supplies source archives, and do not manually
+attach assets or binary assets.
 
 ## 7. Verify the published release
 

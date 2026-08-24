@@ -4,10 +4,12 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ## [Unreleased]
 
+## [1.1] - 2026-08-23
+
 ### Added
 
 - An app-hosted settings window shared with the screensaver's Options sheet, including Restore
-  Defaults, cowfile selection, and direct access through `Cowsaver.app --configure`.
+  Defaults, cowfile selection, a Reveal button, and direct access through `Cowsaver.app --configure`.
 - `sizeVariation`, which varies the fitted text size by rotation within its configured range.
 - Configuration validation through `cowsaver-cli --validate-config`, default output through
   `cowsaver-cli --print-default-config`, and warnings for unknown configuration keys.
@@ -48,6 +50,7 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   same-named personal and bundled files.
 - Out-of-range, fractional, or unreadable settings-window values are rejected in place; a failed
   `config.json` write leaves the window open with its values intact and explains the failure.
+- The settings window now explains when `config.json` does not yet exist.
 - Activation reloads edited configuration and reports unknown keys; unavailable cowfile names and
   their ordered resource fallbacks are reported as well.
 - The settings window uses its presentation display, reapplies its height cap after that display

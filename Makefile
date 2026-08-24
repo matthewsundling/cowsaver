@@ -7,7 +7,7 @@ KIT_DIR         := $(SOURCES_DIR)/CowsayKit
 CONFIG          ?= debug
 BIN             := .build/$(CONFIG)/cowsaver-cli
 
-VERSION         := 1.0.0
+VERSION         := 1.1.0
 SAVER           := Cowsaver.saver
 APP             := Cowsaver.app
 BUILD_DIR       := build

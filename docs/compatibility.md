@@ -8,6 +8,7 @@ Third-party macOS screensavers use a deprecated surface. This document records w
 
 | macOS version | Status | Notes |
 |---|---|---|
+| Sonoma 14.5 | Tested | 23F79, arm64. See the Sonoma 14.5 field pass below. |
 | Sequoia 15.7.5 | Tested | Screensaver and preview work. |
 | Sequoia 15.7.7 | Tested | Screensaver and preview work. |
 | Sequoia 15.7.8 | Tested | Screensaver and preview work. Development machine: 24G824, x86_64, Swift 6.1.2 Command Line Tools. |
@@ -16,6 +17,22 @@ Third-party macOS screensavers use a deprecated surface. This document records w
 | macOS 26 Tahoe 26.6.1 | Tested; fixes pending verification | 25G76, Apple silicon, with the lifecycle logging streamed live. The clipping in [#2](https://github.com/matthewsundling/cowsaver/issues/2) is host geometry: the host resizes the view to the display's pixel dimensions while the hosting window stays at point dimensions, so content fitted to those bounds is drawn at twice the intended size. Cowsaver now fits content to the window instead, which no Tahoe machine has confirmed yet. The Options sheet of [#1](https://github.com/matthewsundling/cowsaver/issues/1) opens, saves, and closes when System Settings reaches the extension; what remains is that some Options clicks produce no activity anywhere, which relaunching System Settings clears. The sheet itself opened taller than this 1280x828-point display leaves room for, putting its buttons at the bottom edge; it now caps its height and scrolls its controls ([#16](https://github.com/matthewsundling/cowsaver/issues/16)). |
 
 The project began on an Intel MacBook Pro with dual graphics, but Cowsaver makes no hardware-specific compatibility claim.
+
+## Sonoma 14.5 field pass
+
+The Sonoma pass used macOS Sonoma 14.5 (23F79) on arm64, Xcode Command Line Tools
+16.2.0.0.1.1733547573, and Apple Swift 6.0.3 (swiftlang-6.0.3.1.10). It tested commit
+`8b1cc95`. `make install` and `make app` succeeded; `make test` passed 311 tests; and
+`make smoke` matched 219/219 goldens.
+
+System Settings selection, preview, Options editing and saving, saver activation, small preview
+layout, and settings behavior were observed working without clipping. The standalone app remained
+correctly fitted while an external display was connected and disconnected during fullscreen use.
+No screenshots were retained.
+
+The first-use Reveal button showed that a missing `config.json` had no visible explanation. The
+inline explanation was added in commit `5850335` after this pass, so it was not part of the
+Sonoma evidence.
 
 ## Compatibility posture
 
