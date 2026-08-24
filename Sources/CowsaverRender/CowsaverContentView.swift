@@ -87,9 +87,8 @@ public final class CowsaverContentView: NSView {
     /// A 1 px border on the view's own layer (bounds) and a contrasting one on the text
     /// layer.
     ///
-    /// A screenshot can then tell a host-geometry bug from a layout bug. Off by
-    /// default; when off, rendering is unchanged (`borderWidth` is already `0` on a fresh
-    /// `CALayer`).
+    /// The contrasting borders distinguish host geometry from text layout. Off by default;
+    /// when off, rendering is unchanged (`borderWidth` is already `0` on a fresh `CALayer`).
     ///
     /// Called from `init`, `apply(configuration:)`, and `present` so the borders persist
     /// across a config reload, a resize, and a rotation, whichever changes first.
@@ -107,17 +106,17 @@ public final class CowsaverContentView: NSView {
     /// The region content is fitted to and positioned in: this view's bounds, clamped per
     /// dimension to the hosting window and anchored at the view's origin.
     ///
-    /// On macOS 26 the legacy host sometimes resizes the view to the display's pixel
-    /// dimensions while the hosting window stays at point dimensions (issue #2). Content
-    /// fitted to those bounds is drawn at twice the intended size, and with AppKit's
-    /// bottom-left origin the window shows only the window-sized region at the view's
-    /// origin. Fitting to the window instead keeps the whole block where it can be seen.
+    /// The legacy host can resize the view to the display's pixel dimensions while the
+    /// hosting window remains at point dimensions. Content fitted to those bounds is drawn
+    /// at twice the intended size, and with AppKit's bottom-left origin the window shows only
+    /// the window-sized region at the view's origin. Fitting to the window instead keeps the
+    /// whole block where it can be seen.
     ///
     /// A window below the floor describes nothing: the host attaches a view to a `0x0`
     /// frame before the real one arrives, and loads a preview instance whose own frame is
     /// empty. Those fall back to the bounds, and so does every healthy view, whose window
-    /// is at least as large as the bounds it was given. The window frame alone decides
-    /// this; it was authoritative in every capture, including ones where `screen` was nil.
+    /// is at least as large as the bounds it was given. The window frame alone decides this,
+    /// so clamping does not depend on the host providing a `screen`.
     private var effectiveCanvas: CGSize {
         guard let size = lastWindowSize else { return bounds.size }
         return CGSize(width: min(bounds.width, size.width),
@@ -126,11 +125,9 @@ public final class CowsaverContentView: NSView {
 
     /// The most recent window size worth clamping to.
     ///
-    /// The host drops the view's window while still rendering through it: on macOS 26.6.1
-    /// every unclamped full-screen present in a field capture landed in the same
-    /// millisecond as a `viewDidMoveToWindow` reporting no window. Reading `window?.frame`
-    /// directly means those presents fit to the bounds and draw at twice the size, so the
-    /// last real window stands in until one is attached again.
+    /// The host can drop the view's window while still rendering through it. Reading
+    /// `window?.frame` directly would make those presents fit to the bounds and draw at twice
+    /// the size, so the last meaningful window stands in until one is attached again.
     private var lastWindowSize: CGSize?
 
     /// Record the window size before anything reads `effectiveCanvas`.
@@ -205,8 +202,8 @@ public final class CowsaverContentView: NSView {
             textLayer.add(fade, forKey: "cowsaver.fade")
         }
 
-        // The canvas appears only when it differs from the bounds, which is the clamp
-        // engaging; the fields the field diagnosis greps for are unchanged.
+        // Include the canvas only when the hosting window clamps the view's bounds, making
+        // the effective drawing area differ from the reported bounds.
         let clamp = canvas == bounds.size ? "" : " canvas=\(Self.format(canvas))"
         log("present bounds=\(Self.format(bounds))\(clamp) " +
             "fontSize=\(Self.format(metrics.fontSize)) " +
@@ -220,8 +217,8 @@ public final class CowsaverContentView: NSView {
     /// from the font. It stays at or above `Layout.fit`'s floor; containment runs afterwards
     /// and keeps the last word, which shrinking alone cannot threaten.
     ///
-    /// At `0` nothing is drawn from the generator, so a configuration that does not ask for
-    /// size variation keeps the exact random sequence, and the exact frames, it has today.
+    /// At `0` nothing is drawn from the generator, so disabling size variation preserves the
+    /// exact random sequence and frames.
     private func varied(_ metrics: LayoutMetrics, of block: String) -> LayoutMetrics {
         let variation = configuration.effectiveSizeVariation
         guard variation > 0 else { return metrics }
@@ -275,8 +272,8 @@ public final class CowsaverContentView: NSView {
     /// Re-fit from the layout pass too.
     ///
     /// A host can attach this view at a placeholder size and settle its real geometry by a
-    /// path that never calls `setFrameSize` — the leading hypothesis for the clipping on
-    /// timer activation in issue #2. Every such path still runs a layout pass.
+    /// path that never calls `setFrameSize`. Every such path still runs a layout pass, so the
+    /// current block must also be re-fitted here.
     public override func layout() {
         super.layout()
         refitIfCanvasChanged()
@@ -305,10 +302,9 @@ public final class CowsaverContentView: NSView {
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "render")
 
     private func log(_ message: String) {
-        // Mirrors CowsaverView.log(_:); kept local so CowsaverRender has no dependency on
-        // CowsaverSaver for a one-line logging wrapper. os_log rather than NSLog because
-        // the macOS 26 host drops NSLog output from the appex; public privacy so `log show`
-        // does not redact the message.
+        // Keep this wrapper local so CowsaverRender does not depend on CowsaverSaver. The
+        // screensaver host can discard NSLog output from the extension; unified logging keeps
+        // it available, and public privacy prevents `log show` from redacting the message.
         Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 

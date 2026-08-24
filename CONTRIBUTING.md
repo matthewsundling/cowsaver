@@ -67,7 +67,7 @@ Follow `Resources/fortune-curated/provenance.md`: remove the record from the cur
 
 Match the surrounding code. Comments should explain non-obvious behavior and constraints: cowsay's byte-based wrapping, `Text::Wrap`'s reserved final column, `-t` selecting tired eyes, and the static cowfile subset are good examples.
 
-Typically, comments lead with one short sentence that stands alone, then a blank /// line, then the reasoning-- the constraint, the rejected alternative, the bug it prevents. Explain intent, not mechanics.
+Typically, comments lead with one short sentence that stands alone, then a blank /// line, then the reasoning—the constraint, the rejected alternative, the bug it prevents. Explain intent, not mechanics.
 
 ## Reporting compatibility
 

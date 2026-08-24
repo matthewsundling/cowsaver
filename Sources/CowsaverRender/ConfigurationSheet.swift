@@ -174,8 +174,8 @@ public final class ConfigurationSheet: NSObject {
 
         // Show the configuration location shared by the sheet and the runtime loader.
         stack.addArrangedSubview(caption("""
-            Every setting here also lives in config.json inside Cowsaver's container, \
-            which is the supported way to configure it. See docs/configuration.md for the path.
+            Every setting here is stored in config.json. Use the Reveal button below to open \
+            its supported location in Finder.
             """, width: width))
         stack.addArrangedSubview(NSButton(title: "Reveal config.json in Finder",
                                           target: self, action: #selector(revealConfiguration)))
@@ -249,8 +249,8 @@ public final class ConfigurationSheet: NSObject {
         applyHeightPolicy()
     }
 
-    /// The room kept clear below the selected screen's visible frame, so a sheet's own lowest
-    /// button never sits past the bottom of the display (issue #16).
+    /// The room kept clear below the selected screen's visible frame, so a sheet's lowest
+    /// button remains above the bottom of the display.
     private static let screenAllowance: CGFloat = 120
 
     /// Parent wins once attached: `sheetParent` exists only after the host has actually begun
@@ -530,8 +530,8 @@ public final class ConfigurationSheet: NSObject {
 
     @objc private func revealConfiguration() {
         let url = ResourceLocations.canonicalConfigurationURL()
-        // A missing file has nothing for Finder to select. Keep the diagnostic log and tell
-        // the person that OK is the action that creates the canonical configuration file.
+        // A missing file gives Finder nothing to select. Tell the person that OK creates the
+        // canonical configuration file.
         guard FileManager.default.fileExists(atPath: url.path) else {
             log("no config.json to reveal at \(url.path); click OK to write one")
             showSaveError("No config.json exists yet. Click OK to create it.")
@@ -555,8 +555,8 @@ public final class ConfigurationSheet: NSObject {
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "sheet")
 
     private func log(_ message: String) {
-        // os_log rather than NSLog: the macOS 26 host drops NSLog output from the appex,
-        // and public privacy keeps the message readable in `log show`.
+        // The screensaver host can discard NSLog output from the extension. Unified logging
+        // keeps these messages available, and public privacy keeps them readable in `log show`.
         Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 
@@ -638,8 +638,8 @@ extension ConfigurationSheet: NSWindowDelegate {
 
 // MARK: - Writing the config file
 
-/// What came of one save attempt. Replaces the earlier `String?` convention, where `nil`
-/// silently meant success and was easy to confuse with "no message yet".
+/// The result of one save attempt. A distinct success case prevents the absence of an error
+/// message from being mistaken for a successful write.
 enum SaveOutcome: Equatable, Sendable {
     case saved
     /// A human-readable reason, suitable for showing next to the OK button. The sheet adds

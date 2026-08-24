@@ -96,10 +96,9 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
         // Defer the first fit by one runloop turn.
         //
-        // A host that finalises geometry just after startAnimation returns would otherwise
-        // have its content fitted to a placeholder size — the leading hypothesis for the
-        // clipping on timer activation in issue #2. The content view re-fits on later
-        // geometry signals as well; this catches the case where none arrives.
+        // A host can finalise geometry just after startAnimation returns. Deferring prevents
+        // the first content from being fitted to a placeholder size; the content view also
+        // re-fits on any later geometry signal.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isAnimating, self.window != nil else { return }
             self.rotate()
@@ -156,8 +155,8 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     private var sheet: ConfigurationSheet?
 
     public override var hasConfigureSheet: Bool {
-        // Logged because a host that never asks is indistinguishable, from the outside,
-        // from a sheet that fails to open (issue #1). One capture settles which it is.
+        // Log the capability query as well as the sheet request so a host that never asks can
+        // be distinguished from a failure after it asks.
         log("hasConfigureSheet queried")
         return true
     }
@@ -215,11 +214,10 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
 
     /// Re-read `config.json` when its complete state differs from what this view last loaded.
     ///
-    /// The legacy host can reuse a view across activations, and a view that resolves its
-    /// configuration only in `init` keeps its birth configuration forever, so an edited file
-    /// reaches nothing but a freshly created view (issue #10). State and content rather than
-    /// mtime: this catches missing/unreadable/oversized transitions without clock-granularity
-    /// edge cases.
+    /// The legacy host can reuse a view across activations, so resolving configuration only
+    /// in `init` would prevent an edited file from reaching that view. Compare complete state
+    /// and content rather than mtime to catch missing, unreadable, and oversized transitions
+    /// without clock-granularity edge cases.
     ///
     /// Applies the result the way the sheet's save path does. `startAnimation` renders after
     /// this returns, immediately for a preview and a runloop turn later otherwise, so there
@@ -265,15 +263,13 @@ public final class CowsaverView: ScreenSaverView, RotationClient {
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "saver")
 
     private func log(_ message: String) {
-        // os_log with an explicit subsystem and public privacy: on macOS 26 the host drops
-        // NSLog output from the appex entirely, and the default privacy would redact the
-        // message in `log show`. Default level persists to disk for after-the-fact capture.
+        // The screensaver host can discard NSLog output from the extension. An explicit
+        // unified-log subsystem keeps these messages available, public privacy keeps them
+        // readable in `log show`, and the default level preserves them after the process exits.
         Self.logger.log("[Cowsaver] \(message, privacy: .public)")
     }
 
-    /// One grep-friendly line per lifecycle event.
-    ///
-    /// Enough to diagnose host geometry regressions from a single `log stream` capture.
+    /// Records the view, window, and screen geometry in one stable line per lifecycle event.
     private func logGeometry(_ event: String) {
         let windowFrame = window?.frame
         let screenFrame = window?.screen?.frame
