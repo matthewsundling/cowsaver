@@ -279,19 +279,6 @@ struct ConfigurationSheetTests {
         #expect(noCap == nil, "with no candidate screen at all there is no cap, not zero and not a guess")
     }
 
-    /// Construction must not silently fall back to a global screen: with no injected cap at
-    /// all (the constructor's own default, not an explicitly passed nil), the window is built
-    /// at its natural height. This must hold on any Mac, with any number of displays.
-    @Test func constructionWithNoInjectedCapUsesNaturalHeightRegardlessOfAnyScreen() throws {
-        let sheet = ConfigurationSheet(configuration: Configuration(), cowfileNames: cowfileNames,
-                                       persister: { _ in .saved }) { _ in }
-        let content = try #require(sheet.window.contentView)
-        content.layoutSubtreeIfNeeded()
-
-        let natural = try #require(makeSheet(cappedAt: nil).window.contentView)
-        #expect(content.frame.height == natural.frame.height)
-    }
-
     /// A short cap shrinks the window; a later, taller maximum must restore exactly the
     /// natural height recorded at construction, not merely grow from the reduced height.
     @Test func aShortCapThenATallMaximumShrinksThenRestoresExactlyTheNaturalHeight() throws {

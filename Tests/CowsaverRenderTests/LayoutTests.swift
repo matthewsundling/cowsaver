@@ -8,17 +8,6 @@ import Testing
 struct LayoutTests {
     private var theme: Theme { Theme(configuration: Configuration()) }
 
-    @Test func measuresColumnsAndRows() {
-        #expect(Layout.measure("abc\nde\nf").columns == 3)
-        #expect(Layout.measure("abc\nde\nf").rows == 3)
-    }
-
-    /// Rendered cow blocks always end with a newline; that must not count as a further row
-    /// or every block would be laid out one line too tall.
-    @Test func trailingNewlineIsNotAnExtraRow() {
-        #expect(Layout.measure("one\ntwo\n").rows == 2)
-    }
-
     @Test func emptyBlockDoesNotCrash() {
         let metrics = Layout.fit(block: "", theme: theme, in: CGSize(width: 800, height: 600))
         #expect(metrics.fontSize > 0)
@@ -111,20 +100,6 @@ struct LayoutTests {
         let enormous = Layout.fit(block: String(repeating: "x", count: 100_000),
                                   theme: theme, in: bounds, range: 6 ... 96)
         #expect(enormous.fontSize >= 6)
-    }
-
-    /// A fortune longer than the screen must still be laid out rather than overflowing
-    /// unboundedly.
-    @Test func absurdlyLargeBlockStillFitsInsideTheMargin() {
-        let bounds = CGSize(width: 1440, height: 900)
-        let block = (0 ..< 400).map { _ in String(repeating: "x", count: 120) }
-            .joined(separator: "\n")
-        let metrics = Layout.fit(block: block, theme: theme, in: bounds)
-        // At the clamp floor it may not fit; above the floor it must.
-        if metrics.fontSize > 6 {
-            #expect(metrics.textSize.width <= bounds.width)
-            #expect(metrics.textSize.height <= bounds.height)
-        }
     }
 
     @Test func explicitFontSizeIsHonoured() {

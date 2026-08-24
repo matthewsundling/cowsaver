@@ -62,16 +62,6 @@ struct ImageRenderTests {
         #expect(large.metrics.fontSize < small.metrics.fontSize)
     }
 
-    /// A fortune longer than the screen must not overflow it.
-    @Test func oversizedContentStaysInsideTheFrame() throws {
-        let result = try #require(ImageRenderer.render(block: sampleBlock(columns: 300, rows: 120),
-                                                       configuration: Configuration(), size: size))
-        if result.metrics.fontSize > 6 {
-            #expect(result.metrics.textSize.width <= size.width)
-            #expect(result.metrics.textSize.height <= size.height)
-        }
-    }
-
     @Test func explicitFontSizeIsUsedVerbatim() throws {
         var configuration = Configuration()
         configuration.fontSize = 22

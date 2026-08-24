@@ -425,10 +425,8 @@ public struct FortuneDatabase: Sendable {
             return .success(data)
         }
 
-        /// Reserves `size` more bytes against the aggregate cap using overflow-checked
-        /// addition. File size metadata is attacker- or accident-controlled and must
-        /// never be trusted to add safely; exercised directly by tests that simulate an
-        /// extreme reported size without needing to create a file that large.
+        /// Reserves `size` actual bytes against the aggregate cap. The addition remains
+        /// overflow-checked even though callers admit only bounded read results.
         func reserveAggregateBytes(_ size: Int) -> Bool {
             let (sum, overflowed) = aggregateBytesRead.addingReportingOverflow(size)
             guard !overflowed, sum <= limits.maxAggregateBytes else {
