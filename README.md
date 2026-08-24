@@ -37,11 +37,11 @@ Created and maintained by [C. Matthew Sundling](https://github.com/matthewsundli
 - **Cowsaver.app** — a standalone development and fallback app. It is not a lock-screen screensaver.
 - **Low idle activity** — Cowsaver renders when its content rotates rather than running a continuous animation loop.
 
-Built with a macOS 13.0 deployment target. Verified on macOS Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9. macOS 26 Tahoe has been diagnosed and has application-side defenses, but they are pending direct verification; Tahoe is not supported. See [compatibility notes](docs/compatibility.md).
+Built with a macOS 13.0 deployment target. Verified on macOS Sonoma 14.5 and Sequoia 15.7.5, 15.7.7, 15.7.8, and 15.7.9. macOS 26 Tahoe has been diagnosed and has application-side defenses, but they are pending direct verification; Tahoe is not supported. See [compatibility notes](docs/compatibility.md).
 
 ## Install
 
-Cowsaver is built from source and installed locally; it is not Developer ID signed.
+Cowsaver is distributed source-only and installed locally; it is not Developer ID signed.
 
 ```sh
 make install
