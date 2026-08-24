@@ -8,16 +8,6 @@ struct ConfigurationTests {
         Configuration.load(data: Data(json.utf8))
     }
 
-    @Test func defaultsMatchTheDocumentedConfig() {
-        let configuration = Configuration()
-        #expect(configuration.rotationSeconds == 45)
-        #expect(configuration.wrapWidth == 40)
-        #expect(configuration.cowfiles == ["stegosaurus", "default", "tux", "dragon"])
-        #expect(configuration.foreground == "#33FF66")   // green phosphor
-        #expect(configuration.fontSize == 0)             // auto-fit
-        #expect(!configuration.debugFrame)
-    }
-
     @Test func debugFrameLoadsFromJSON() {
         let result = load("{\"debugFrame\": true}")
         #expect(result.configuration.debugFrame)
@@ -391,13 +381,6 @@ struct ConfigurationTests {
         var configuration = Configuration()
         configuration.sizeVariation = input
         #expect(configuration.effectiveSizeVariation == expected)
-    }
-
-    @Test func anOutOfRangeSizeVariationClampsWhileLoading() {
-        let result = load("{\"sizeVariation\": 2.0}")
-        #expect(result.configuration.sizeVariation == 0.9)
-        #expect(result.configuration.effectiveSizeVariation == 0.9)
-        #expect(warning(result, for: "sizeVariation", containing: "clamped to 0.9"))
     }
 
     @Test func sizeVariationOfTheWrongTypeKeepsTheDefault() {

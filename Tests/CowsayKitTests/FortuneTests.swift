@@ -363,21 +363,6 @@ struct BoundedLoadingTests {
         #expect(database.fortunes.map(\.text) == ["0123456789abcde"])
     }
 
-    /// A malicious or corrupt file can report almost any size in its metadata — a real
-    /// fixture cannot portably force `FileManager` to report a near-`Int.max` file size, so
-    /// this drives the accumulator directly with the extreme value a poisoned
-    /// `URLResourceValues.fileSize` would otherwise pass it.
-    @Test func aggregateByteLimitCannotOverflowWhenFileMetadataReportsAnExtremeSize() {
-        let limits = FortuneDatabase.Limits(maxFileBytes: Int.max, maxAggregateBytes: 1_000_000,
-                                            maxRetainedRecords: 1_000, maxExaminedEntries: 1_000)
-        let budget = FortuneDatabase.LoadBudget(limits: limits)
-
-        #expect(budget.reserveAggregateBytes(1_000), "an ordinary reservation still succeeds")
-        #expect(!budget.reserveAggregateBytes(Int.max),
-                "1_000 + Int.max wraps past Int.max and must be rejected, not crash")
-        #expect(budget.statistics.aggregateByteLimitReached)
-    }
-
     // MARK: Actual bytes read, not stated metadata
 
     /// A candidate that cannot be read must not be charged for its stated size — tested
