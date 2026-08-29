@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MESSAGE_FILE="$1"
+if grep -Eiq '(^|[[:space:]])co-authored-by:|generated (with|by)|https?://[^[:space:]]*(session|share)' "$MESSAGE_FILE"; then
+  echo "commit-msg: remove attribution trailers, generated-by language, or session links"
+  exit 1
+fi

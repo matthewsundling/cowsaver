@@ -207,6 +207,12 @@ Regenerating the committed golden output requires cowsay 3.8.4 (`brew install co
 | [Curated fortune provenance](Resources/fortune-curated/provenance.md) | Runtime corpus, curation record, licence, and removals. |
 | [Source-import provenance](Resources/fortune-upstream/provenance.md) | Source, licence, and checksum information for the preserved fortune-mod import. |
 
+## Repository checks
+
+The tracked pre-commit hook runs fast staged-file checks and `make check`. Full Swift and golden
+tests remain in CI. Activate the hooks once per clone with `git config core.hooksPath .githooks`;
+run the repository checks directly with `scripts/check --all`.
+
 ## License
 
 Cowsaver's code and project-authored documentation are licensed under [GPLv3](LICENSE). The bundled cowfiles and fortune material retain their own terms. See [license-notice.md](license-notice.md) and [credits.md](credits.md).
