@@ -26,7 +26,7 @@ HISTORICAL = re.compile(
 LINK = re.compile(r"\]\(([^)]+)\)")
 BACKTICK_PATH = re.compile(r"`((?:\.\./)+[^`]+)`")
 ABSOLUTE_WORKSPACE = re.compile(
-    r"(?:~/|/Users/[^/]+/)(?:projects|repos/personal)/[A-Za-z0-9_.\-/]+"
+    r"(?:~/|/Users/[^/]+/)(?:atlas|projects|repos/personal)/[A-Za-z0-9_.\-/]+"
 )
 
 SECRET_PATTERNS = (
