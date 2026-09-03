@@ -107,7 +107,7 @@ import() {
                 cp -p "$file" "$target/$relative"
             fi
             copied=$((copied+1))
-        done < <(find "$source" -type f -print0 2>/dev/null | sort -z)
+        done < <(find "$source" -type f -print0 2>/dev/null | LC_ALL=C sort -z)
     done
 
     if [[ "$found" -eq 0 ]]; then
