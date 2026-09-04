@@ -896,6 +896,10 @@ struct EngineTests {
         return "\(eyes)|\(tongue)"
     }
 
+    private func fixtureCowName(in block: String, among names: [String]) -> String? {
+        names.first { block.contains("\($0)-fixture-cow") }
+    }
+
     private func cowFixtureDirectory(_ names: [String]) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cowsaver-engine-tests-\(UUID().uuidString)")
@@ -963,7 +967,7 @@ struct EngineTests {
         #expect(engine.nextBlock().contains("beta-fixture-cow"))
     }
 
-    @Test func allInvalidConfiguredNamesUseAvailableDefaultCowsFirst() throws {
+    @Test func allInvalidConfiguredNamesCycleAvailableDefaultCowsInOrder() throws {
         let cows = try cowFixtureDirectory(["other", "tux", "default"])
         defer { try? FileManager.default.removeItem(at: cows) }
 
@@ -972,14 +976,16 @@ struct EngineTests {
         configuration.cowfiles = ["missing", "also-missing"]
         let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 3)
 
-        #expect(engine.nextBlock().contains("default-fixture-cow"),
-                "the first available name in the documented default order is pinned")
+        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+        #expect(blocks.compactMap { fixtureCowName(in: $0, among: ["default", "tux"]) }
+                == ["default", "tux", "default", "tux"],
+                "the available default cows cycle in their documented order")
         #expect(engine.diagnostics.notes.contains {
             $0 == "no configured cowfiles loaded; using default cowfiles: default, tux"
         })
     }
 
-    @Test func missingConfiguredAndDefaultCowsUseAllAvailableCows() throws {
+    @Test func missingConfiguredAndDefaultCowsCycleAllAvailableCowsInOrder() throws {
         let cows = try cowFixtureDirectory(["zeta", "alpha"])
         defer { try? FileManager.default.removeItem(at: cows) }
 
@@ -988,14 +994,16 @@ struct EngineTests {
         configuration.cowfiles = ["missing"]
         let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 4)
 
-        #expect(engine.nextBlock().contains("alpha-fixture-cow"),
-                "all-library fallback is sorted and deterministic")
+        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+        #expect(blocks.compactMap { fixtureCowName(in: $0, among: ["alpha", "zeta"]) }
+                == ["alpha", "zeta", "alpha", "zeta"],
+                "all-library fallback is sorted and cycles deterministically")
         #expect(engine.diagnostics.notes.contains {
             $0 == "no configured or default cowfiles loaded; using all 2 available cowfiles"
         })
     }
 
-    @Test func emptyCowfileListUsesEveryAvailableCow() throws {
+    @Test func emptyCowfileListCyclesEveryAvailableCowInOrder() throws {
         let cows = try cowFixtureDirectory(["zeta", "alpha"])
         defer { try? FileManager.default.removeItem(at: cows) }
 
@@ -1007,7 +1015,9 @@ struct EngineTests {
             cowDirectories: [cows],
             seed: 5
         )
-        #expect(engine.nextBlock().contains("alpha-fixture-cow"))
+        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+        #expect(blocks.compactMap { fixtureCowName(in: $0, among: ["alpha", "zeta"]) }
+                == ["alpha", "zeta", "alpha", "zeta"])
         #expect(!engine.diagnostics.usingBuiltInCow)
         #expect(!engine.diagnostics.notes.contains { $0.contains("configured cowfiles") })
     }
@@ -1029,7 +1039,7 @@ struct EngineTests {
         #expect(engine.diagnostics.notes.filter { $0.contains("duplicate configured cowfile") }.count == 2)
     }
 
-    @Test func randomCowFalsePinsFirstLoadableConfiguredName() throws {
+    @Test func randomCowFalseCyclesLoadableConfiguredNamesInOrder() throws {
         let cows = try cowFixtureDirectory(["alpha", "beta"])
         defer { try? FileManager.default.removeItem(at: cows) }
 
@@ -1037,12 +1047,13 @@ struct EngineTests {
         configuration.randomCow = false
         configuration.cowfiles = ["missing", "beta", "alpha"]
         let engine = CowsaverEngine(configuration: configuration, cowDirectories: [cows], seed: 7)
-        let blocks = (0 ..< 4).map { _ in engine.nextBlock() }
+        let blocks = (0 ..< 5).map { _ in engine.nextBlock() }
 
-        #expect(blocks.allSatisfy { $0.contains("beta-fixture-cow") })
+        #expect(blocks.compactMap { fixtureCowName(in: $0, among: ["beta", "alpha"]) }
+                == ["beta", "alpha", "beta", "alpha", "beta"])
     }
 
-    @Test func randomCowFalsePinsASingleCow() {
+    @Test func randomCowFalseRepeatsASingleSelectedCow() {
         var configuration = Configuration()
         configuration.randomCow = false
         configuration.cowfiles = ["stegosaurus"]
@@ -1053,7 +1064,7 @@ struct EngineTests {
             seed: 4
         )
         let blocks = (0 ..< 5).map { _ in engine.nextBlock() }
-        // Same cow every time; only the balloon above it changes.
+        // A one-cow sequence repeats that cow every time; only the balloon above it changes.
         let tails = blocks.map { $0.split(separator: "\n").suffix(6).joined(separator: "\n") }
         #expect(Set(tails).count == 1)
     }

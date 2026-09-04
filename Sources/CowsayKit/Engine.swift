@@ -32,7 +32,9 @@ public final class CowsaverEngine {
     /// Kept separate from every existing picker and the balloon stream. A random face must
     /// not move seeded fortune, cow, or balloon choices made by an existing configuration.
     private var faceGenerator: SplitMix64
-    private let fixedCow: Cowfile?
+    /// The configured cow order, used when random cow selection is off.
+    private let orderedCows: [Cowfile]
+    private var nextOrderedCowIndex = 0
     public private(set) var diagnostics: Diagnostics
 
     /// - Parameter seed: seed the picker per view instance, so a second display does not
@@ -98,7 +100,7 @@ public final class CowsaverEngine {
             diagnostics.notes.append("no cowfiles found; using the built-in cow")
         }
 
-        self.fixedCow = configuration.randomCow ? nil : enabled.first
+        self.orderedCows = enabled
         self.cowPicker = NoRepeatSelector(elements: enabled,
                                           historyLimit: min(5, enabled.count - 1),
                                           seed: seed &* 31)
@@ -173,7 +175,7 @@ public final class CowsaverEngine {
                           preview: Bool = false) -> String {
         if preview { return Self.previewBlock }
         let fortune = fortunePicker.next()?.text ?? BuiltIn.fortunes[0]
-        let cow = fixedCow ?? cowPicker.next() ?? BuiltIn.defaultCow
+        let cow = nextCow()
         // Pick once per generated block. Adaptive wrapping may render several candidates, but
         // every candidate must compare the same balloon rather than spending another choice.
         let balloonMode = nextBalloonMode()
@@ -183,6 +185,17 @@ public final class CowsaverEngine {
         let block = bestBlock(fortune: fortune, cow: cow, mode: balloonMode, face: face,
                               canvas: canvas)
         return block.isEmpty ? fallbackBlock(face: face) : block
+    }
+
+    private func nextCow() -> Cowfile {
+        guard !configuration.randomCow else {
+            return cowPicker.next() ?? BuiltIn.defaultCow
+        }
+        guard !orderedCows.isEmpty else { return BuiltIn.defaultCow }
+
+        let cow = orderedCows[nextOrderedCowIndex]
+        nextOrderedCowIndex = (nextOrderedCowIndex + 1) % orderedCows.count
+        return cow
     }
 
     private func nextBalloonMode() -> BalloonMode {
