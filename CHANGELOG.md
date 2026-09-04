@@ -4,6 +4,19 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- Settings controls for custom foreground/background colors, custom cow eyes and tongue, and
+  random speech/thought balloons, plus a compact live cow preview.
+
+### Changed
+
+- Reorganized the shared scrollable settings window into Timing, Cow Selection, Appearance,
+  Placement and Sizing, and Configuration sections. `wrapWidth`, `maxFortuneLines`, and
+  `fontSize` are now file-only while remaining fully supported and preserved by panel saves.
+- Random balloon selection uses an independent seeded sequence and retains one choice across
+  adaptive-wrap candidates, leaving existing cow and fortune sequences unchanged.
+
 ## [1.1] - 2026-08-23
 
 ### Added

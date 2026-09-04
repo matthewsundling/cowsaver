@@ -22,16 +22,24 @@ public final class ConfigurationSheet: NSObject {
 
     // Controls are internal so the round-trip test can drive them.
     var rotationField: NSTextField!
-    var wrapField: NSTextField!
-    var maxLinesField: NSTextField!
     var themePopup: NSPopUpButton!
     var stylePopup: NSPopUpButton!
-    var fontSizeField: NSTextField!
+    var foregroundField: NSTextField!
+    var backgroundField: NSTextField!
+    var foregroundWell: NSColorWell!
+    var backgroundWell: NSColorWell!
+    var eyesBox: NSButton!
+    var eyesField: NSTextField!
+    var tongueBox: NSButton!
+    var tongueField: NSTextField!
+    var previewField: NSTextField!
     var adaptiveWrapBox: NSButton!
     var randomCowBox: NSButton!
     var repositionBox: NSButton!
     var sizeVariationBox: NSButton!
+    var pinnedFontSizeCaption: NSTextField!
     var transitionBox: NSButton!
+    var revealButton: NSButton!
     var restoreButton: NSButton!
     var cancelButton: NSButton!
     var okButton: NSButton!
@@ -40,6 +48,11 @@ public final class ConfigurationSheet: NSObject {
     var errorLabel: NSTextField!
     /// One checkbox per bundled cow, in the order the list shows them.
     private(set) var cowfileBoxes: [NSButton] = []
+    /// Section headings and custom-color rows are retained for structural and visibility tests.
+    private(set) var sectionTitles: [NSTextField] = []
+    private(set) var customColorRows: [NSView] = []
+    private(set) var settingsStack: NSStackView!
+    private(set) var cowSelectionHeader: NSStackView!
 
     /// Shown when raw `foreground` and `background` values are active instead of a preset.
     private let customColorsTitle = "custom colors"
@@ -50,6 +63,11 @@ public final class ConfigurationSheet: NSObject {
 
     /// What checking the box means when the file names no amount of its own.
     private let defaultSizeVariation = 0.3
+
+    /// The most recent valid raw color behind each field. A named theme may hide an invalid
+    /// draft; saving it restores this value rather than allowing invalid JSON to escape.
+    private var lastValidForeground = Configuration().foreground
+    private var lastValidBackground = Configuration().background
 
     // MARK: Presentation sizing
 
@@ -104,7 +122,7 @@ public final class ConfigurationSheet: NSObject {
     // MARK: Layout
 
     private func buildWindow(cowfileNames: [String], maximumContentHeight: CGFloat?) {
-        let width: CGFloat = 420
+        let width: CGFloat = 460
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 400),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -112,6 +130,7 @@ public final class ConfigurationSheet: NSObject {
         window.title = "Cowsaver"
 
         let stack = NSStackView()
+        settingsStack = stack
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
@@ -122,42 +141,71 @@ public final class ConfigurationSheet: NSObject {
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         rotationField = NSTextField(string: "")
-        wrapField = NSTextField(string: "")
-        maxLinesField = NSTextField(string: "")
-        fontSizeField = NSTextField(string: "")
-        for field in [rotationField, wrapField, maxLinesField, fontSizeField] {
-            field?.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        }
+        rotationField.widthAnchor.constraint(equalToConstant: 70).isActive = true
 
         themePopup = NSPopUpButton()
         themePopup.addItems(withTitles: ThemePreset.all.map(\.name))
         themePopup.addItem(withTitle: customColorsTitle)
+        themePopup.target = self
+        themePopup.action = #selector(themeChanged)
+
+        foregroundField = NSTextField(string: "")
+        backgroundField = NSTextField(string: "")
+        foregroundWell = NSColorWell()
+        backgroundWell = NSColorWell()
+        for field in [foregroundField, backgroundField] {
+            field?.widthAnchor.constraint(equalToConstant: 110).isActive = true
+            field?.delegate = self
+        }
+        for well in [foregroundWell, backgroundWell] {
+            well?.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            well?.target = self
+            well?.action = #selector(colorWellChanged(_:))
+        }
 
         stylePopup = NSPopUpButton()
-        stylePopup.addItems(withTitles: ["say", "think"])
+        stylePopup.addItems(withTitles: ["say", "think", "random"])
+        stylePopup.target = self
+        stylePopup.action = #selector(appearanceChanged)
 
-        adaptiveWrapBox = checkbox("Widen the balloon when that makes the text bigger", on: false)
+        eyesBox = checkbox("Custom eyes", on: false)
+        eyesField = NSTextField(string: "")
+        tongueBox = checkbox("Custom tongue", on: false)
+        tongueField = NSTextField(string: "")
+        for box in [eyesBox, tongueBox] {
+            box?.target = self
+            box?.action = #selector(faceOverrideChanged)
+        }
+        for field in [eyesField, tongueField] {
+            field?.widthAnchor.constraint(equalToConstant: 170).isActive = true
+            field?.delegate = self
+        }
+
+        previewField = NSTextField(wrappingLabelWithString: "")
+        previewField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        previewField.isSelectable = false
+        previewField.drawsBackground = true
+        previewField.isBezeled = true
+        previewField.alignment = .left
+        previewField.widthAnchor.constraint(equalToConstant: width - 40).isActive = true
+        previewField.heightAnchor.constraint(equalToConstant: 145).isActive = true
+
+        adaptiveWrapBox = checkbox("Optimize balloon width for the screen", on: false)
         randomCowBox = checkbox("Random cow each rotation", on: false)
         repositionBox = checkbox("Move to a new position each rotation", on: false)
-        sizeVariationBox = checkbox("Vary the text size between rotations", on: false)
+        sizeVariationBox = checkbox("Vary text size between rotations", on: false)
         transitionBox = checkbox("Fade between fortunes", on: false)
         cowfileBoxes = cowfileNames.map { checkbox($0, on: false) }
 
+        stack.addArrangedSubview(sectionTitle("Timing"))
         stack.addArrangedSubview(row("Seconds between fortunes:", rotationField))
         stack.addArrangedSubview(caption("""
             How long one fortune stays on screen before Cowsaver draws the next.
             """, width: width))
-        stack.addArrangedSubview(row("Narrowest wrap column:", wrapField))
-        stack.addArrangedSubview(row("Longest fortune, in lines (0 = no limit):", maxLinesField))
-        stack.addArrangedSubview(row("Font size (0 = fit to screen):", fontSizeField))
-        stack.addArrangedSubview(row("Theme:", themePopup))
-        stack.addArrangedSubview(row("Balloon:", stylePopup))
-        stack.addArrangedSubview(adaptiveWrapBox)
-        stack.addArrangedSubview(randomCowBox)
-        stack.addArrangedSubview(repositionBox)
-        stack.addArrangedSubview(sizeVariationBox)
         stack.addArrangedSubview(transitionBox)
 
+        stack.addArrangedSubview(sectionTitle("Cow Selection"))
+        stack.addArrangedSubview(randomCowBox)
         let cowHeader = NSStackView(views: [
             NSTextField(labelWithString: "Cows:"),
             NSButton(title: "All", target: self, action: #selector(checkEveryCow)),
@@ -165,20 +213,44 @@ public final class ConfigurationSheet: NSObject {
         ])
         cowHeader.orientation = .horizontal
         cowHeader.spacing = 8
+        cowSelectionHeader = cowHeader
         stack.addArrangedSubview(cowHeader)
         stack.addArrangedSubview(cowfileList(width: width))
         stack.addArrangedSubview(caption("""
-            Checking every cow, or none of them, saves an empty list, which Cowsaver reads \
-            as the whole bundled set.
+            With random selection off, Cowsaver uses the first checked cow that loads. Checking \
+            every cow, or none, saves the whole bundled set.
             """, width: width))
 
+        stack.addArrangedSubview(sectionTitle("Appearance"))
+        stack.addArrangedSubview(row("Theme:", themePopup))
+        customColorRows = [
+            row("Foreground:", NSStackView(views: [foregroundField, foregroundWell])),
+            row("Background:", NSStackView(views: [backgroundField, backgroundWell])),
+        ]
+        for colorRow in customColorRows { stack.addArrangedSubview(colorRow) }
+        stack.addArrangedSubview(row("Balloon style:", stylePopup))
+        stack.addArrangedSubview(row("", NSStackView(views: [eyesBox, eyesField])))
+        stack.addArrangedSubview(row("", NSStackView(views: [tongueBox, tongueField])))
+        stack.addArrangedSubview(NSTextField(labelWithString: "Preview"))
+        stack.addArrangedSubview(previewField)
+
+        stack.addArrangedSubview(sectionTitle("Placement and Sizing"))
+        stack.addArrangedSubview(repositionBox)
+        stack.addArrangedSubview(sizeVariationBox)
+        pinnedFontSizeCaption = caption("", width: width)
+        stack.addArrangedSubview(pinnedFontSizeCaption)
+        stack.addArrangedSubview(adaptiveWrapBox)
+
         // Show the configuration location shared by the sheet and the runtime loader.
+        stack.addArrangedSubview(sectionTitle("Configuration"))
         stack.addArrangedSubview(caption("""
-            Every setting here is stored in config.json. Use the Reveal button below to open \
-            its supported location in Finder.
+            These settings are stored in the shared config.json at \
+            \(ResourceLocations.canonicalConfigurationURL().path). Seven additional settings \
+            remain file-only.
             """, width: width))
-        stack.addArrangedSubview(NSButton(title: "Reveal config.json in Finder",
-                                          target: self, action: #selector(revealConfiguration)))
+        revealButton = NSButton(title: "Reveal config.json in Finder",
+                                target: self, action: #selector(revealConfiguration))
+        stack.addArrangedSubview(revealButton)
 
         restoreButton = NSButton(title: "Restore Defaults", target: self,
                                  action: #selector(restoreDefaults))
@@ -328,6 +400,14 @@ public final class ConfigurationSheet: NSObject {
         return row
     }
 
+    private func sectionTitle(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        label.identifier = NSUserInterfaceItemIdentifier("section.\(title)")
+        sectionTitles.append(label)
+        return label
+    }
+
     private func checkbox(_ title: String, on: Bool) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: nil, action: nil)
         button.state = on ? .on : .off
@@ -392,9 +472,6 @@ public final class ConfigurationSheet: NSObject {
     func apply(_ configuration: Configuration) {
         clearError()
         rotationField.stringValue = String(Int(configuration.rotationInterval))
-        wrapField.stringValue = String(configuration.effectiveWrapWidth)
-        maxLinesField.stringValue = String(configuration.effectiveMaxFortuneLines)
-        fontSizeField.stringValue = fontSizeDisplayString(configuration.effectivePinnedFontSize)
 
         if let theme = configuration.theme, ThemePreset.named(theme) != nil {
             themePopup.selectItem(withTitle: theme)
@@ -402,6 +479,22 @@ public final class ConfigurationSheet: NSObject {
             themePopup.selectItem(withTitle: customColorsTitle)
         }
         stylePopup.selectItem(withTitle: configuration.balloonStyle)
+        foregroundField.stringValue = configuration.foreground
+        backgroundField.stringValue = configuration.background
+        lastValidForeground = ThemeColor(hex: configuration.foreground) == nil
+            ? Configuration().foreground : configuration.foreground
+        lastValidBackground = ThemeColor(hex: configuration.background) == nil
+            ? Configuration().background : configuration.background
+        synchronizeColorWell(foregroundWell, with: foregroundField,
+                             fallback: configuration.resolvedForeground)
+        synchronizeColorWell(backgroundWell, with: backgroundField,
+                             fallback: configuration.resolvedBackground)
+
+        eyesBox.state = configuration.eyes == nil ? .off : .on
+        eyesField.stringValue = configuration.eyes ?? ""
+        tongueBox.state = configuration.tongue == nil ? .off : .on
+        tongueField.stringValue = configuration.tongue ?? ""
+        updateFaceFieldAvailability()
 
         adaptiveWrapBox.state = configuration.adaptiveWrap ? .on : .off
         randomCowBox.state = configuration.randomCow ? .on : .off
@@ -410,11 +503,19 @@ public final class ConfigurationSheet: NSObject {
         loadedSizeVariation = configuration.effectiveSizeVariation
         transitionBox.state = configuration.wantsTransition ? .on : .off
 
+        let pinnedFontSize = self.configuration.effectivePinnedFontSize
+        sizeVariationBox.isEnabled = pinnedFontSize == 0
+        pinnedFontSizeCaption.stringValue = pinnedFontSize == 0 ? "" :
+            "Text size is fixed at \(displayString(pinnedFontSize)) points by fontSize in config.json."
+        pinnedFontSizeCaption.isHidden = pinnedFontSize == 0
+
         // An empty list means every bundled cow, which shows as all of them checked.
         let selected = Set(configuration.cowfiles)
         for box in cowfileBoxes {
             box.state = selected.isEmpty || selected.contains(box.title) ? .on : .off
         }
+        updateCustomColorVisibility()
+        updatePreview()
     }
 
     /// The checked names in list order. Everything checked — or nothing — saves an empty
@@ -448,41 +549,44 @@ public final class ConfigurationSheet: NSObject {
         }
         candidate.rotationSeconds = Double(rotation)
 
-        guard let wrap = wholeNumber(wrapField.stringValue,
-                                     in: Configuration.wrapWidthRange) else {
-            showValidationError(
-                "Narrowest wrap column must be a whole number from "
-                    + "\(Configuration.wrapWidthRange.lowerBound) to "
-                    + "\(Configuration.wrapWidthRange.upperBound).",
-                field: wrapField)
-            return
-        }
-        candidate.wrapWidth = wrap
-
-        guard let maxLines = wholeNumber(maxLinesField.stringValue,
-                                         in: Configuration.maxFortuneLinesRange) else {
-            showValidationError(
-                "Longest fortune, in lines must be a whole number from "
-                    + "\(Configuration.maxFortuneLinesRange.lowerBound) to "
-                    + "\(Configuration.maxFortuneLinesRange.upperBound), or 0 for no limit.",
-                field: maxLinesField)
-            return
-        }
-        candidate.maxFortuneLines = maxLines
-
-        guard let fontSize = fontSizeValue(fontSizeField.stringValue) else {
-            showValidationError(
-                "Font size must be 0 to fit the screen, or a number from "
-                    + "\(Int(Configuration.pinnedFontSizeRange.lowerBound)) to "
-                    + "\(Int(Configuration.pinnedFontSizeRange.upperBound)).",
-                field: fontSizeField)
-            return
-        }
-        candidate.fontSize = fontSize
-
         let selectedTheme = themePopup.titleOfSelectedItem
         candidate.theme = selectedTheme == customColorsTitle ? nil : selectedTheme
+        if candidate.theme == nil {
+            guard ThemeColor(hex: foregroundField.stringValue) != nil else {
+                showValidationError(
+                    "Foreground must be three or six hexadecimal digits, with or without #.",
+                    field: foregroundField)
+                return
+            }
+            guard ThemeColor(hex: backgroundField.stringValue) != nil else {
+                showValidationError(
+                    "Background must be three or six hexadecimal digits, with or without #.",
+                    field: backgroundField)
+                return
+            }
+            candidate.foreground = foregroundField.stringValue
+            candidate.background = backgroundField.stringValue
+            lastValidForeground = foregroundField.stringValue
+            lastValidBackground = backgroundField.stringValue
+        } else {
+            // Named themes do not use these fields, but valid drafts remain ready for the next
+            // switch to custom colors. Hidden invalid drafts neither block nor reach the file.
+            if ThemeColor(hex: foregroundField.stringValue) != nil {
+                candidate.foreground = foregroundField.stringValue
+                lastValidForeground = foregroundField.stringValue
+            } else {
+                candidate.foreground = lastValidForeground
+            }
+            if ThemeColor(hex: backgroundField.stringValue) != nil {
+                candidate.background = backgroundField.stringValue
+                lastValidBackground = backgroundField.stringValue
+            } else {
+                candidate.background = lastValidBackground
+            }
+        }
         candidate.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
+        candidate.eyes = eyesBox.state == .on ? eyesField.stringValue : nil
+        candidate.tongue = tongueBox.state == .on ? tongueField.stringValue : nil
         candidate.adaptiveWrap = adaptiveWrapBox.state == .on
         candidate.randomCow = randomCowBox.state == .on
         candidate.reposition = repositionBox.state == .on
@@ -511,6 +615,33 @@ public final class ConfigurationSheet: NSObject {
 
     private func setEveryCow(_ state: NSControl.StateValue) {
         for box in cowfileBoxes { box.state = state }
+    }
+
+    @objc func themeChanged() {
+        updateCustomColorVisibility()
+        updatePreview()
+    }
+
+    @objc private func appearanceChanged() { updatePreview() }
+
+    @objc func faceOverrideChanged() {
+        updateFaceFieldAvailability()
+        updatePreview()
+    }
+
+    @objc func colorWellChanged(_ sender: NSColorWell) {
+        let field = sender === foregroundWell ? foregroundField! : backgroundField!
+        field.stringValue = Self.opaqueHex(sender.color)
+        synchronizeColorWell(sender, with: field,
+                             fallback: sender === foregroundWell
+                                ? configuration.resolvedForeground
+                                : configuration.resolvedBackground)
+        if field === foregroundField {
+            lastValidForeground = field.stringValue
+        } else {
+            lastValidBackground = field.stringValue
+        }
+        updatePreview()
     }
 
     @objc private func restoreDefaults() {
@@ -598,22 +729,72 @@ public final class ConfigurationSheet: NSObject {
         return Int(decoded)
     }
 
-    /// `fontSize` is the one numeric control that keeps its decimal value: `0` is exactly
-    /// auto-fit, and every other valid value is returned unrounded so a typed or loaded
-    /// `18.5` survives unchanged.
-    private func fontSizeValue(_ text: String) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let decoded = Double(trimmed), decoded.isFinite else { return nil }
-        if decoded == 0 { return 0 }
-        guard decoded >= Configuration.pinnedFontSizeRange.lowerBound,
-              decoded <= Configuration.pinnedFontSizeRange.upperBound else { return nil }
-        return decoded
+    /// A whole value reads as a whole number; a decimal such as `18.5` keeps its fraction.
+    private func displayString(_ value: Double) -> String {
+        value.rounded(.towardZero) == value ? String(Int(value)) : String(value)
     }
 
-    /// A whole value reads as a whole number; a pinned decimal such as `18.5` keeps its
-    /// fraction instead of gaining floating-point noise.
-    private func fontSizeDisplayString(_ value: Double) -> String {
-        value.rounded(.towardZero) == value ? String(Int(value)) : String(value)
+    private func updateCustomColorVisibility() {
+        let hidden = themePopup.titleOfSelectedItem != customColorsTitle
+        for row in customColorRows { row.isHidden = hidden }
+    }
+
+    private func updateFaceFieldAvailability() {
+        eyesField.isEnabled = eyesBox.state == .on
+        tongueField.isEnabled = tongueBox.state == .on
+    }
+
+    private func synchronizeColorWell(_ well: NSColorWell, with field: NSTextField,
+                                      fallback: ThemeColor) {
+        well.color = NSColor(ThemeColor(hex: field.stringValue) ?? fallback)
+    }
+
+    private func updatePreview() {
+        var preview = configuration
+        let selectedTheme = themePopup.titleOfSelectedItem
+        preview.theme = selectedTheme == customColorsTitle ? nil : selectedTheme
+        if ThemeColor(hex: foregroundField.stringValue) != nil {
+            preview.foreground = foregroundField.stringValue
+        }
+        if ThemeColor(hex: backgroundField.stringValue) != nil {
+            preview.background = backgroundField.stringValue
+        }
+        preview.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
+        preview.eyes = eyesBox.state == .on ? eyesField.stringValue : nil
+        preview.tongue = tongueBox.state == .on ? tongueField.stringValue : nil
+
+        let bytes = CowRenderer.render(message: "Moo!", cowfile: BuiltIn.defaultCow,
+                                       mode: preview.balloonMode, face: preview.resolvedFace,
+                                       wrapColumns: 40)
+        previewField.stringValue = String(decoding: bytes, as: UTF8.self)
+        previewField.textColor = NSColor(preview.resolvedForeground)
+        previewField.backgroundColor = NSColor(preview.resolvedBackground)
+    }
+
+    private static func opaqueHex(_ color: NSColor) -> String {
+        let converted = color.usingColorSpace(.sRGB) ?? color.usingColorSpace(.deviceRGB)
+        guard let converted else { return "#000000" }
+        func byte(_ component: CGFloat) -> Int {
+            min(max(Int((component * 255).rounded()), 0), 255)
+        }
+        return String(format: "#%02X%02X%02X", byte(converted.redComponent),
+                      byte(converted.greenComponent), byte(converted.blueComponent))
+    }
+}
+
+extension ConfigurationSheet: NSTextFieldDelegate {
+    public func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        if field === foregroundField, ThemeColor(hex: field.stringValue) != nil {
+            lastValidForeground = field.stringValue
+            synchronizeColorWell(foregroundWell, with: field,
+                                 fallback: configuration.resolvedForeground)
+        } else if field === backgroundField, ThemeColor(hex: field.stringValue) != nil {
+            lastValidBackground = field.stringValue
+            synchronizeColorWell(backgroundWell, with: field,
+                                 fallback: configuration.resolvedBackground)
+        }
+        updatePreview()
     }
 }
 

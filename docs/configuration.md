@@ -3,8 +3,9 @@
 Cowsaver keeps its settings in one JSON file. This document describes every key that file
 understands, what each one does, and what happens when a value is wrong.
 
-`docs/config.example.json` is a complete, loadable file containing every key at its shipped
-value. Copy it to the path below and edit it.
+`docs/config.example.json` is a complete, loadable file containing every nonoptional key at its
+shipped value. Optional `eyes` and `tongue` overrides are omitted when unset. Copy the example to
+the path below and edit it.
 
 ## Where the file lives
 
@@ -46,19 +47,24 @@ It prints the search order with a `*` beside the file it found, then validates i
 - **The screensaver's Options sheet**, when macOS opens it.
 - **The standalone app's settings window**: `./build/Cowsaver.app/Contents/MacOS/Cowsaver --configure`.
 
-The sheet and the settings window are the same window, and both write the same
-`config.json` — there is no second store. Six keys are file-only, because they have no
-control in that window: `face`, `fontName`, `foreground`, `background`, `weightByFile`, and
-`debugFrame`. The window preserves them; it writes back every key it read. Restore Defaults
-changes only the controls in the window; it writes nothing until you click OK, and it does
-not touch the six file-only settings.
+The sheet and the settings window are the same scrollable window, and both write the same
+`config.json` — there is no second store. Its sections are Timing, Cow Selection, Appearance,
+Placement and Sizing, and Configuration. Cow selection keeps its Random control, All/None
+buttons, and checklist together. Appearance includes theme and custom-color controls, balloon
+style, custom eyes and tongue, and a live cow preview. Custom quote and cowfile management remain
+file-based.
 
-The window accepts the same supported ranges as the file — see the table below — but it asks
-you to correct an invalid value instead of clamping it the way a hand-edited file would.
-`rotationSeconds`, `wrapWidth`, and `maxFortuneLines` must be whole numbers; `fontSize` may be
-a decimal, such as `18.5`, and keeps that exact value. An out-of-range, fractional, or
-unreadable entry leaves OK without saving: the field is selected with an explanation next to
-the buttons, and every other value you typed stays exactly as you left it.
+Seven keys are file-only because they have no control in that window: `wrapWidth`,
+`maxFortuneLines`, `fontSize`, `face`, `fontName`, `weightByFile`, and `debugFrame`. The window
+preserves them on an ordinary save and through Restore Defaults. Restore Defaults resets every
+panel-controlled value, including the raw custom colors, eyes, tongue, and balloon style; it
+writes nothing until you click OK.
+
+The window validates the whole-number `rotationSeconds` field against the supported range below.
+When custom colors are active, it also requires both color fields to use a supported hexadecimal
+spelling. An invalid entry leaves OK without saving: the field is selected with an explanation
+next to the buttons, and every other value you typed stays exactly as you left it. Invalid hidden
+color drafts do not block or persist with a named theme.
 
 A key the file does not hold takes Cowsaver's built-in default; nothing else is layered
 underneath.
@@ -75,13 +81,15 @@ the problem and clicking OK again retries with the values still in the window. A
 | Key | Type | Default | Range and clamping |
 |---|---|---|---|
 | `rotationSeconds` | whole number | `45` | 1–600 seconds. |
-| `wrapWidth` | whole number | `40` | 2–500 columns. |
+| `wrapWidth` | whole number | `40` | File-only. 2–500 columns. |
 | `cowfiles` | array | `["stegosaurus", "default", "tux", "dragon"]` | Ordered, unique, exact cowfile names; `[]` means every loadable cowfile. |
 | `randomCow` | boolean | `true` | — |
-| `face` | string | `"default"` | Face names, single letters, or a comma- or space-separated list. |
-| `balloonStyle` | string | `"say"` | `say` or `think`, case-insensitively; invalid values warn and use `say`. |
-| `fontName` | string | `"Menlo"` | A non-empty name; rendering requires fixed pitch and otherwise uses a fallback chain. |
-| `fontSize` | number | `0` | `0` auto-fits; otherwise 6–144 points. Decimal pinned sizes are valid. |
+| `face` | string | `"default"` | File-only face names, single letters, or a comma- or space-separated list. |
+| `eyes` | string | unset | Optional custom eyes; any string is accepted and the first two UTF-8 bytes render. |
+| `tongue` | string | unset | Optional custom tongue; any string is accepted and the first two UTF-8 bytes render. |
+| `balloonStyle` | string | `"say"` | `say`, `think`, or `random`, case-insensitively; invalid values warn and use `say`. |
+| `fontName` | string | `"Menlo"` | File-only. A non-empty name; rendering requires fixed pitch and otherwise uses a fallback chain. |
+| `fontSize` | number | `0` | File-only. `0` auto-fits; otherwise 6–144 points. Decimal pinned sizes are valid. |
 | `sizeVariation` | number | `0` | 0–0.9. Applies to auto-fit only. |
 | `foreground` | string | `"#33FF66"` | `#RGB` or `#RRGGBB`, with or without the `#`. |
 | `background` | string | `"#000000"` | Same as `foreground`. |
@@ -89,8 +97,8 @@ the problem and clicking OK again retries with the values still in the window. A
 | `transition` | string | `"fade"` | `fade` or `none`, case-insensitively; invalid values warn and use `fade`. |
 | `reposition` | boolean | `true` | — |
 | `adaptiveWrap` | boolean | `true` | — |
-| `maxFortuneLines` | whole number | `60` | 0–100; `0` means no limit. |
-| `weightByFile` | boolean | `false` | — |
+| `maxFortuneLines` | whole number | `60` | File-only. 0–100; `0` means no limit. |
+| `weightByFile` | boolean | `false` | File-only. |
 | `debugFrame` | boolean | `false` | File-only; no control in the settings window. |
 
 JSON booleans and numbers are different types: boolean settings accept only `true` or `false`,
@@ -139,7 +147,7 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
 
 - **`wrapWidth`** is the narrowest balloon Cowsaver will use, in columns. It is also the
   width `maxFortuneLines` is measured at, so lowering it makes fortunes taller and drops
-  more of them.
+  more of them. It is configured in the file, not in the settings window.
 - **`adaptiveWrap`** lets a rotation try wider balloons — 1.5×, 2×, 2.5×, and 3× `wrapWidth`,
   never past 500 columns — and moves to a wider one only when it draws the text at least 10%
   bigger than the best width so far. A tie keeps the narrower balloon, so a short fortune
@@ -150,7 +158,10 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   points cannot fit — a Settings preview pane rather than a screen — the block is scaled
   down past that floor rather than clipped. A finite pinned value from 6 through 144, including
   decimals such as `18.5`, is taken as deliberate — a block too large for the screen is clipped
-  rather than shrunk.
+  rather than shrunk. It is configured in the file. A pinned nonzero value disables the
+  settings window's size-variation checkbox and is explained beside it; saving the window does
+  not alter either file value during an ordinary save. Restore Defaults deliberately resets the
+  panel-controlled `sizeVariation` while preserving `fontSize`.
 - **`sizeVariation`** draws each rotation below the fitted size, by up to that fraction of
   it: `0.3` picks a size somewhere between 70% and 100% of the fit, keeps it for that
   rotation, and picks again at the next one. `0`, the default, draws every rotation at the
@@ -185,7 +196,10 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   also naming a `theme` drops the shipped preset, so the colors you wrote are the ones you
   get. Naming a theme in the same file is how you ask for the preset instead; the preset
   then supplies both resolved colors. The raw fields still have to be valid because they remain
-  persisted.
+  persisted. The settings window shows their text fields and system color wells only when
+  *custom colors* is selected. Typed valid spelling and letter case are preserved. A color-well
+  selection writes opaque uppercase `#RRGGBB`. Valid custom values remain remembered while a
+  named theme is active.
 
   Omitting all three appearance keys uses `green-phosphor` without warning. Omitting `theme`
   while supplying either raw color is the one spelling for custom colors. A present but empty,
@@ -202,8 +216,18 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   means the ordinary face and adds no mode when another recognized mode is present. If no
   recognized token remains, Cowsaver stores `default` and says so. With several modes, cowsay's
   own precedence decides the eyes.
-- **`balloonStyle`** is `say` or `think`. `think` draws cowsay's thought balloon. Note that
-  the `tired` face mode is not a thought balloon, despite cowsay's `-t` flag.
+- **`eyes`** and **`tongue`** are optional literal overrides corresponding to cowsay's `-e` and
+  `-T`. Missing keys mean unset; empty strings and whitespace are intentional values and survive
+  a round trip. Cowsay renders only the first two UTF-8 bytes, so Cowsaver does too, while keeping
+  the complete string in the file. `face` modes are applied after these overrides and retain
+  cowsay's precedence: for example, `dead` replaces both custom eyes and tongue. Wrong types,
+  including JSON `null`, warn and recover to unset. The settings-window checkboxes distinguish an
+  unset override from an enabled empty string.
+- **`balloonStyle`** is `say`, `think`, or `random`. `think` draws cowsay's thought balloon.
+  `random` chooses either shape independently with equal probability once per generated block;
+  repeats are allowed, and adaptive-wrap candidates retain that block's one choice. Balloon
+  randomness has its own seeded sequence, so it does not disturb cow or fortune selection. Note
+  that the `tired` face mode is not a thought balloon, despite cowsay's `-t` flag.
 
 ### Diagnostics
 
@@ -250,6 +274,7 @@ on its own, so one bad value costs you that value and nothing else:
   `#000000`) without discarding a valid sibling.
 - Invalid `balloonStyle`, `transition`, `face`, and `fontName` values name the field, warn, and
   state the value used for recovery.
+- Wrong-type `eyes` and `tongue` values warn and recover to unset; every string value is valid.
 - A file that is not valid JSON, or is JSON but not an object, warns and yields the shipped
   defaults entire.
 - **A key Cowsaver does not know is named and ignored**, so a misspelled one no longer looks
@@ -278,9 +303,10 @@ To start from the shipped defaults instead of an existing file:
 .build/debug/cowsaver-cli --print-default-config > config.json
 ```
 
-That output has all 18 keys, `config.example.json` included. A file written by the settings
-window under *custom colors* has 17: Cowsaver omits an unset theme rather than writing it
-empty, which leaves the raw `foreground` and `background` values in effect.
+That output has the 18 nonoptional keys, as does `config.example.json`. The two optional face
+override keys appear only when set. A file written by the settings window under *custom colors*
+omits `theme` rather than writing it empty, which leaves the raw `foreground` and `background`
+values in effect.
 
 ## The example file, annotated
 
@@ -292,7 +318,7 @@ with comments added:
 {
   "adaptiveWrap" : true,               // may widen the balloon to fill the screen
   "background" : "#000000",            // ignored while "theme" names a preset
-  "balloonStyle" : "say",              // "think" for a thought balloon
+  "balloonStyle" : "say",              // "think" or an equal-probability "random"
   "cowfiles" : [                       // [] would mean every bundled cowfile
     "stegosaurus",
     "default",
@@ -301,6 +327,7 @@ with comments added:
   ],
   "debugFrame" : false,                // true draws the layout borders
   "face" : "default",                  // or "dead", "d", "dead, young", ...
+                                          // optional "eyes" and "tongue" keys are unset here
   "fontName" : "Menlo",                // must be fixed-pitch
   "fontSize" : 0,                      // 0 fits each fortune to the screen
   "foreground" : "#33FF66",            // ignored while "theme" names a preset
