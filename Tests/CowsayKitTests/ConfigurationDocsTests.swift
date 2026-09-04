@@ -6,7 +6,7 @@ import Testing
 ///
 /// `docs/configuration.md` and `docs/config.example.json` describe the keys
 /// `Configuration` understands. Nothing in the build forces them to stay in step, so these
-/// tests do: adding a nonoptional field without putting it in the example, omitting any field
+/// tests do: adding a field without putting it in the example, omitting any field
 /// from the reference, or leaving a retired key in the example fails here rather than reaching
 /// a reader who then configures something that no longer exists.
 ///
@@ -25,11 +25,10 @@ struct ConfigurationDocsTests {
         return try #require(parsed as? [String: Any], "the example is not a JSON object")
     }
 
-    /// Optional custom face strings are omitted at their default nil value. Every other key
-    /// appears, and the example cannot keep a key the loader has dropped.
-    @Test func theExampleHoldsEveryNonoptionalKnownKey() throws {
+    /// Every key appears, and the example cannot keep a key the loader has dropped.
+    @Test func theExampleHoldsEveryKnownKey() throws {
         let keys = Set(try Self.exampleObject().keys)
-        let required = Set(Configuration.knownKeys).subtracting(["eyes", "tongue"])
+        let required = Set(Configuration.knownKeys)
         let missing = required.subtracting(keys).sorted()
         let unknown = keys.subtracting(Configuration.knownKeys).sorted()
         #expect(keys == required,

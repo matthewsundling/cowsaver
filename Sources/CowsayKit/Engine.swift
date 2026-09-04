@@ -29,6 +29,9 @@ public final class CowsaverEngine {
     /// Kept separate from both content selectors so enabling random balloons cannot move the
     /// established seeded cow or fortune sequences.
     private var balloonGenerator: SplitMix64
+    /// Kept separate from every existing picker and the balloon stream. A random face must
+    /// not move seeded fortune, cow, or balloon choices made by an existing configuration.
+    private var faceGenerator: SplitMix64
     private let fixedCow: Cowfile?
     public private(set) var diagnostics: Diagnostics
 
@@ -100,6 +103,7 @@ public final class CowsaverEngine {
                                           historyLimit: min(5, enabled.count - 1),
                                           seed: seed &* 31)
         self.balloonGenerator = SplitMix64(seed: seed ^ 0xD1B5_4A32_D192_ED03)
+        self.faceGenerator = SplitMix64(seed: seed ^ 0xA4C5_3E71_9B20_FD46)
 
         // --- Fortunes -----------------------------------------------------------
         let loaded = FortuneDatabase.load(directories: fortuneDirectories,
@@ -173,8 +177,12 @@ public final class CowsaverEngine {
         // Pick once per generated block. Adaptive wrapping may render several candidates, but
         // every candidate must compare the same balloon rather than spending another choice.
         let balloonMode = nextBalloonMode()
-        let block = bestBlock(fortune: fortune, cow: cow, mode: balloonMode, canvas: canvas)
-        return block.isEmpty ? fallbackBlock() : block
+        // The same is true for a face: one choice belongs to the block, rather than to every
+        // adaptive-wrap candidate.
+        let face = nextFace()
+        let block = bestBlock(fortune: fortune, cow: cow, mode: balloonMode, face: face,
+                              canvas: canvas)
+        return block.isEmpty ? fallbackBlock(face: face) : block
     }
 
     private func nextBalloonMode() -> BalloonMode {
@@ -182,6 +190,16 @@ public final class CowsaverEngine {
             return configuration.balloonMode
         }
         return balloonGenerator.next() & 1 == 0 ? .say : .think
+    }
+
+    /// Selects independently and with replacement from the default face plus all eight
+    /// cowsay modes. Each non-default mode is constructed on its own so Dead and Stoned carry
+    /// cowsay's `U ` tongue while every other choice carries the default tongue.
+    private func nextFace() -> Face {
+        guard configuration.wantsRandomFace else { return configuration.resolvedFace }
+        let index = Int.random(in: 0 ... FaceMode.allCases.count, using: &faceGenerator)
+        guard index > 0 else { return .default }
+        return Face.construct(modes: [FaceMode.allCases[index - 1]])
     }
 
     /// Compact deterministic content for a host preview pane.
@@ -198,7 +216,7 @@ public final class CowsaverEngine {
     )
 
     /// Render `fortune` in `cow` at whichever candidate wrap width fills `canvas` best.
-    private func bestBlock(fortune: String, cow: Cowfile, mode: BalloonMode,
+    private func bestBlock(fortune: String, cow: Cowfile, mode: BalloonMode, face: Face,
                            canvas: AdaptiveWrap.Canvas?) -> String {
         let base = configuration.effectiveWrapWidth
 
@@ -207,7 +225,7 @@ public final class CowsaverEngine {
                 message: Message.linesFromStdin(Bytes.from(fortune)),
                 cowfile: cow,
                 mode: mode,
-                face: configuration.resolvedFace,
+                face: face,
                 wrapColumns: columns
             ))
             // `String(decoding:as:)` always returns a displayable string. The normal resource
@@ -233,8 +251,9 @@ public final class CowsaverEngine {
     }
 
     /// Render the compiled-in cow and first compiled-in fortune.
-    private func fallbackBlock() -> String {
+    private func fallbackBlock(face: Face) -> String {
         String(decoding: CowRenderer.render(message: BuiltIn.fortunes[0],
-                                            cowfile: BuiltIn.defaultCow), as: UTF8.self)
+                                            cowfile: BuiltIn.defaultCow,
+                                            face: face), as: UTF8.self)
     }
 }

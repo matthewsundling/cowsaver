@@ -3,9 +3,8 @@
 Cowsaver keeps its settings in one JSON file. This document describes every key that file
 understands, what each one does, and what happens when a value is wrong.
 
-`docs/config.example.json` is a complete, loadable file containing every nonoptional key at its
-shipped value. Optional `eyes` and `tongue` overrides are omitted when unset. Copy the example to
-the path below and edit it.
+`docs/config.example.json` is a complete, loadable file containing every key at its shipped
+value. Copy the example to the path below and edit it.
 
 ## Where the file lives
 
@@ -51,14 +50,14 @@ The sheet and the settings window are the same scrollable window, and both write
 `config.json` — there is no second store. Its sections are Timing, Cow Selection, Appearance,
 Placement and Sizing, and Configuration. Cow selection keeps its Random control, All/None
 buttons, and checklist together. Appearance includes theme and custom-color controls, balloon
-style, custom eyes and tongue, and a live cow preview. Custom quote and cowfile management remain
-file-based.
+style, the cowsay eye modes and random choice, and a live cow preview. Custom quote and cowfile management remain
+file-based. Its bracketed section headings have additional whitespace above each group.
 
-Seven keys are file-only because they have no control in that window: `wrapWidth`,
-`maxFortuneLines`, `fontSize`, `face`, `fontName`, `weightByFile`, and `debugFrame`. The window
+Six keys are file-only because they have no control in that window: `wrapWidth`,
+`maxFortuneLines`, `fontSize`, `fontName`, `weightByFile`, and `debugFrame`. The window
 preserves them on an ordinary save and through Restore Defaults. Restore Defaults resets every
-panel-controlled value, including the raw custom colors, eyes, tongue, and balloon style; it
-writes nothing until you click OK.
+panel-controlled value, including the raw custom colors, face mode, and balloon style; it writes
+nothing until you click OK.
 
 The window validates the whole-number `rotationSeconds` field against the supported range below.
 When custom colors are active, it also requires both color fields to use a supported hexadecimal
@@ -84,9 +83,7 @@ the problem and clicking OK again retries with the values still in the window. A
 | `wrapWidth` | whole number | `40` | File-only. 2–500 columns. |
 | `cowfiles` | array | `["stegosaurus", "default", "tux", "dragon"]` | Ordered, unique, exact cowfile names; `[]` means every loadable cowfile. |
 | `randomCow` | boolean | `true` | — |
-| `face` | string | `"default"` | File-only face names, single letters, or a comma- or space-separated list. |
-| `eyes` | string | unset | Optional custom eyes; any string is accepted and the first two UTF-8 bytes render. |
-| `tongue` | string | unset | Optional custom tongue; any string is accepted and the first two UTF-8 bytes render. |
+| `face` | string | `"default"` | `random`, face names, single letters, or a comma- or space-separated list. The settings window offers Default, one named mode, or Random. |
 | `balloonStyle` | string | `"say"` | `say`, `think`, or `random`, case-insensitively; invalid values warn and use `say`. |
 | `fontName` | string | `"Menlo"` | File-only. A non-empty name; rendering requires fixed pitch and otherwise uses a fallback chain. |
 | `fontSize` | number | `0` | File-only. `0` auto-fits; otherwise 6–144 points. Decimal pinned sizes are valid. |
@@ -207,7 +204,7 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   than activating the raw colors. This is why a saved custom-color file has no `theme` key.
 - **`transition`** controls the 0.6-second crossfade between fortunes. It accepts `fade` or
   `none`; `none` turns the crossfade off.
-- **`face`** applies cowsay's face modes. It accepts full names — `borg`, `dead`, `greedy`,
+- **`face`** applies cowsay's face modes. It accepts `random`, full names — `borg`, `dead`, `greedy`,
   `paranoid`, `stoned`, `tired`, `wired`, `young` — the single letters cowsay uses for them
   (`b`, `d`, `g`, `p`, `s`, `t`, `w`, `y`), or several separated by commas or whitespace:
   `"dead"`, `"d"`, and `"dead, young"` are all valid. Matching is case-insensitive. Recognized
@@ -215,14 +212,22 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   Every unrecognized token is named in a warning while recognized neighbors survive. `default`
   means the ordinary face and adds no mode when another recognized mode is present. If no
   recognized token remains, Cowsaver stores `default` and says so. With several modes, cowsay's
-  own precedence decides the eyes.
-- **`eyes`** and **`tongue`** are optional literal overrides corresponding to cowsay's `-e` and
-  `-T`. Missing keys mean unset; empty strings and whitespace are intentional values and survive
-  a round trip. Cowsay renders only the first two UTF-8 bytes, so Cowsaver does too, while keeping
-  the complete string in the file. `face` modes are applied after these overrides and retain
-  cowsay's precedence: for example, `dead` replaces both custom eyes and tongue. Wrong types,
-  including JSON `null`, warn and recover to unset. The settings-window checkboxes distinguish an
-  unset override from an enabled empty string.
+  own precedence decides the eyes. `random` must stand alone: it selects with replacement and
+  equal probability from Default (`oo`) and the eight named cowsay modes once per generated
+  block, retaining its selection across adaptive-wrap candidates. Its independent seeded stream
+  does not affect cow, fortune, or balloon choices. In a combined value such as
+  `"random, dead"`, `random` is rejected with a warning while the concrete modes survive. The
+  settings popup shows Default (`oo`), Borg (`==`), Dead
+  (`xx`), Greedy (`$$`), Paranoid (`@@`), Stoned (`**`), Tired (`--`), Wired (`OO`), and
+  Youthful/Young (`..`), then Random. It preserves a file-configured combination on unrelated
+  saves and replaces it only when you select a standard item. The preview samples one valid
+  random face when Random is loaded or selected and retains that sample while other appearance
+  controls change. Restore Defaults selects `default`.
+
+  Tongue is not independently configurable in the settings window or `config.json`. Cowsay uses
+  its blank default tongue for every standard mode except Dead and Stoned, which use `U `. In a
+  combination, that `U ` remains even if a later mode replaces the eyes. The command-line
+  compatibility tool still accepts cowsay's literal `-e` and `-T` arguments for golden testing.
 - **`balloonStyle`** is `say`, `think`, or `random`. `think` draws cowsay's thought balloon.
   `random` chooses either shape independently with equal probability once per generated block;
   repeats are allowed, and adaptive-wrap candidates retain that block's one choice. Balloon
@@ -274,7 +279,8 @@ on its own, so one bad value costs you that value and nothing else:
   `#000000`) without discarding a valid sibling.
 - Invalid `balloonStyle`, `transition`, `face`, and `fontName` values name the field, warn, and
   state the value used for recovery.
-- Wrong-type `eyes` and `tongue` values warn and recover to unset; every string value is valid.
+- `eyes` and `tongue` are not configuration keys; if present they are named as unknown and
+  ignored.
 - A file that is not valid JSON, or is JSON but not an object, warns and yields the shipped
   defaults entire.
 - **A key Cowsaver does not know is named and ignored**, so a misspelled one no longer looks
@@ -303,10 +309,9 @@ To start from the shipped defaults instead of an existing file:
 .build/debug/cowsaver-cli --print-default-config > config.json
 ```
 
-That output has the 18 nonoptional keys, as does `config.example.json`. The two optional face
-override keys appear only when set. A file written by the settings window under *custom colors*
-omits `theme` rather than writing it empty, which leaves the raw `foreground` and `background`
-values in effect.
+That output has all 18 keys, as does `config.example.json`. A file written by the settings window
+under *custom colors* omits `theme` rather than writing it empty, which leaves the raw
+`foreground` and `background` values in effect.
 
 ## The example file, annotated
 
@@ -326,8 +331,7 @@ with comments added:
     "dragon"
   ],
   "debugFrame" : false,                // true draws the layout borders
-  "face" : "default",                  // or "dead", "d", "dead, young", ...
-                                          // optional "eyes" and "tongue" keys are unset here
+  "face" : "default",                  // or "random", "dead", "d", "dead, young", ...
   "fontName" : "Menlo",                // must be fixed-pitch
   "fontSize" : 0,                      // 0 fits each fortune to the screen
   "foreground" : "#33FF66",            // ignored while "theme" names a preset

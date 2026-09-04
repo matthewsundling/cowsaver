@@ -28,10 +28,7 @@ public final class ConfigurationSheet: NSObject {
     var backgroundField: NSTextField!
     var foregroundWell: NSColorWell!
     var backgroundWell: NSColorWell!
-    var eyesBox: NSButton!
-    var eyesField: NSTextField!
-    var tongueBox: NSButton!
-    var tongueField: NSTextField!
+    var facePopup: NSPopUpButton!
     var previewField: NSTextField!
     var adaptiveWrapBox: NSButton!
     var randomCowBox: NSButton!
@@ -56,6 +53,24 @@ public final class ConfigurationSheet: NSObject {
 
     /// Shown when raw `foreground` and `background` values are active instead of a preset.
     private let customColorsTitle = "custom colors"
+
+    /// Tags distinguish the ordinary default and mode items from Random and a temporary item
+    /// used to represent a multi-mode value that only the configuration file can express.
+    private static let defaultFaceTag = 0
+    private static let firstFaceModeTag = 1
+    private static let randomFaceTag = 9
+    private static let configuredCombinationFaceTag = 100
+
+    /// The face value most recently put into the controls. Keeping this separate from the
+    /// last accepted configuration lets Restore Defaults populate a new pending value without
+    /// mutating accepted state before OK, while still preserving file spellings on plain saves.
+    private var displayedFaceValue = Configuration().face
+    private var displayedFaceModes: Set<FaceMode> = []
+    private var displayedRandomFace = false
+    /// The sample shown while Random is selected. It deliberately changes only when Random is
+    /// loaded or selected, so color and other appearance edits do not make the preview jump.
+    private var previewRandomFace = Face.default
+    private var previewRandomGenerator = SystemRandomNumberGenerator()
 
     /// The `sizeVariation` the controls were built from. Checking the box hands back a
     /// hand-edited value rather than replacing it with the amount below.
@@ -168,18 +183,10 @@ public final class ConfigurationSheet: NSObject {
         stylePopup.target = self
         stylePopup.action = #selector(appearanceChanged)
 
-        eyesBox = checkbox("Custom eyes", on: false)
-        eyesField = NSTextField(string: "")
-        tongueBox = checkbox("Custom tongue", on: false)
-        tongueField = NSTextField(string: "")
-        for box in [eyesBox, tongueBox] {
-            box?.target = self
-            box?.action = #selector(faceOverrideChanged)
-        }
-        for field in [eyesField, tongueField] {
-            field?.widthAnchor.constraint(equalToConstant: 170).isActive = true
-            field?.delegate = self
-        }
+        facePopup = NSPopUpButton()
+        configureFacePopup()
+        facePopup.target = self
+        facePopup.action = #selector(faceChanged)
 
         previewField = NSTextField(wrappingLabelWithString: "")
         previewField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -197,14 +204,14 @@ public final class ConfigurationSheet: NSObject {
         transitionBox = checkbox("Fade between fortunes", on: false)
         cowfileBoxes = cowfileNames.map { checkbox($0, on: false) }
 
-        stack.addArrangedSubview(sectionTitle("Timing"))
+        addSectionTitle("Timing", to: stack)
         stack.addArrangedSubview(row("Seconds between fortunes:", rotationField))
         stack.addArrangedSubview(caption("""
             How long one fortune stays on screen before Cowsaver draws the next.
             """, width: width))
         stack.addArrangedSubview(transitionBox)
 
-        stack.addArrangedSubview(sectionTitle("Cow Selection"))
+        addSectionTitle("Cow Selection", to: stack)
         stack.addArrangedSubview(randomCowBox)
         let cowHeader = NSStackView(views: [
             NSTextField(labelWithString: "Cows:"),
@@ -221,7 +228,7 @@ public final class ConfigurationSheet: NSObject {
             every cow, or none, saves the whole bundled set.
             """, width: width))
 
-        stack.addArrangedSubview(sectionTitle("Appearance"))
+        addSectionTitle("Appearance", to: stack)
         stack.addArrangedSubview(row("Theme:", themePopup))
         customColorRows = [
             row("Foreground:", NSStackView(views: [foregroundField, foregroundWell])),
@@ -229,12 +236,15 @@ public final class ConfigurationSheet: NSObject {
         ]
         for colorRow in customColorRows { stack.addArrangedSubview(colorRow) }
         stack.addArrangedSubview(row("Balloon style:", stylePopup))
-        stack.addArrangedSubview(row("", NSStackView(views: [eyesBox, eyesField])))
-        stack.addArrangedSubview(row("", NSStackView(views: [tongueBox, tongueField])))
+        stack.addArrangedSubview(row("Eyes:", facePopup))
+        stack.addArrangedSubview(caption("""
+            Random chooses a new cowsay face each rotation. Dead and Stoned use a U tongue;
+            every other mode uses the default tongue.
+            """, width: width))
         stack.addArrangedSubview(NSTextField(labelWithString: "Preview"))
         stack.addArrangedSubview(previewField)
 
-        stack.addArrangedSubview(sectionTitle("Placement and Sizing"))
+        addSectionTitle("Placement and Sizing", to: stack)
         stack.addArrangedSubview(repositionBox)
         stack.addArrangedSubview(sizeVariationBox)
         pinnedFontSizeCaption = caption("", width: width)
@@ -242,10 +252,10 @@ public final class ConfigurationSheet: NSObject {
         stack.addArrangedSubview(adaptiveWrapBox)
 
         // Show the configuration location shared by the sheet and the runtime loader.
-        stack.addArrangedSubview(sectionTitle("Configuration"))
+        addSectionTitle("Configuration", to: stack)
         stack.addArrangedSubview(caption("""
             These settings are stored in the shared config.json at \
-            \(ResourceLocations.canonicalConfigurationURL().path). Seven additional settings \
+            \(ResourceLocations.canonicalConfigurationURL().path). Six additional settings \
             remain file-only.
             """, width: width))
         revealButton = NSButton(title: "Reveal config.json in Finder",
@@ -400,12 +410,43 @@ public final class ConfigurationSheet: NSObject {
         return row
     }
 
+    private func addSectionTitle(_ title: String, to stack: NSStackView) {
+        if let precedingView = stack.arrangedSubviews.last {
+            // The stack's ordinary gap is 12 points; 20 gives later groups a little more air
+            // without separating their headings from the controls they introduce.
+            stack.setCustomSpacing(20, after: precedingView)
+        }
+        stack.addArrangedSubview(sectionTitle(title))
+    }
+
     private func sectionTitle(_ title: String) -> NSTextField {
-        let label = NSTextField(labelWithString: title)
+        let label = NSTextField(labelWithString: "[\(title)]")
         label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         label.identifier = NSUserInterfaceItemIdentifier("section.\(title)")
         sectionTitles.append(label)
         return label
+    }
+
+    private func configureFacePopup() {
+        facePopup.removeAllItems()
+        facePopup.addItem(withTitle: "Default (oo)")
+        facePopup.lastItem?.tag = Self.defaultFaceTag
+        for (index, mode) in FaceMode.allCases.enumerated() {
+            facePopup.addItem(withTitle: Self.faceTitle(for: mode))
+            facePopup.lastItem?.tag = Self.firstFaceModeTag + index
+        }
+        // Keep Random visibly after the concrete cowsay modes. A temporary file-combination
+        // item is inserted immediately before this later, so Random remains the last choice.
+        facePopup.addItem(withTitle: "random")
+        facePopup.lastItem?.tag = Self.randomFaceTag
+    }
+
+    private static func faceTitle(for mode: FaceMode) -> String {
+        let name = mode == .young ? "Youthful" : mode.rawValue.capitalized
+        let face = Face.construct(modes: [mode])
+        let eyes = String(decoding: face.eyes, as: UTF8.self)
+        let tongue = face.tongue == Face.default.tongue ? "" : ", tongue U"
+        return "-\(mode.flag) \(name) (\(eyes)\(tongue))"
     }
 
     private func checkbox(_ title: String, on: Bool) -> NSButton {
@@ -490,11 +531,7 @@ public final class ConfigurationSheet: NSObject {
         synchronizeColorWell(backgroundWell, with: backgroundField,
                              fallback: configuration.resolvedBackground)
 
-        eyesBox.state = configuration.eyes == nil ? .off : .on
-        eyesField.stringValue = configuration.eyes ?? ""
-        tongueBox.state = configuration.tongue == nil ? .off : .on
-        tongueField.stringValue = configuration.tongue ?? ""
-        updateFaceFieldAvailability()
+        selectFace(configuration)
 
         adaptiveWrapBox.state = configuration.adaptiveWrap ? .on : .off
         randomCowBox.state = configuration.randomCow ? .on : .off
@@ -585,8 +622,7 @@ public final class ConfigurationSheet: NSObject {
             }
         }
         candidate.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
-        candidate.eyes = eyesBox.state == .on ? eyesField.stringValue : nil
-        candidate.tongue = tongueBox.state == .on ? tongueField.stringValue : nil
+        candidate.face = selectedFaceValue()
         candidate.adaptiveWrap = adaptiveWrapBox.state == .on
         candidate.randomCow = randomCowBox.state == .on
         candidate.reposition = repositionBox.state == .on
@@ -624,8 +660,10 @@ public final class ConfigurationSheet: NSObject {
 
     @objc private func appearanceChanged() { updatePreview() }
 
-    @objc func faceOverrideChanged() {
-        updateFaceFieldAvailability()
+    @objc func faceChanged() {
+        if facePopup.selectedTag() == Self.randomFaceTag {
+            previewRandomFace = nextPreviewRandomFace()
+        }
         updatePreview()
     }
 
@@ -739,9 +777,55 @@ public final class ConfigurationSheet: NSObject {
         for row in customColorRows { row.isHidden = hidden }
     }
 
-    private func updateFaceFieldAvailability() {
-        eyesField.isEnabled = eyesBox.state == .on
-        tongueField.isEnabled = tongueBox.state == .on
+    private func selectFace(_ configuration: Configuration) {
+        displayedFaceValue = configuration.face
+        displayedFaceModes = configuration.faceModes
+        displayedRandomFace = configuration.wantsRandomFace
+        if let item = facePopup.itemArray.first(where: {
+            $0.tag == Self.configuredCombinationFaceTag
+        }) {
+            facePopup.menu?.removeItem(item)
+        }
+
+        if displayedRandomFace {
+            previewRandomFace = nextPreviewRandomFace()
+            facePopup.selectItem(withTag: Self.randomFaceTag)
+            return
+        }
+
+        let modes = configuration.faceModes
+        if modes.count > 1 {
+            let randomIndex = facePopup.indexOfItem(withTag: Self.randomFaceTag)
+            facePopup.insertItem(withTitle: "File-configured combination: \(configuration.face)",
+                                 at: randomIndex)
+            facePopup.item(at: randomIndex)?.tag = Self.configuredCombinationFaceTag
+            facePopup.selectItem(at: randomIndex)
+        } else if let mode = modes.first,
+                  let index = FaceMode.allCases.firstIndex(of: mode) {
+            facePopup.selectItem(withTag: Self.firstFaceModeTag + index)
+        } else {
+            facePopup.selectItem(withTag: Self.defaultFaceTag)
+        }
+    }
+
+    /// Preserve a file's accepted spelling when the popup still denotes the same face. A
+    /// standard choice that changes the effective face writes the full canonical mode name.
+    private func selectedFaceValue() -> String {
+        let tag = facePopup.selectedTag()
+        if tag == Self.configuredCombinationFaceTag { return displayedFaceValue }
+        if tag == Self.randomFaceTag {
+            return displayedRandomFace ? displayedFaceValue : "random"
+        }
+        if tag == Self.defaultFaceTag {
+            return !displayedRandomFace && displayedFaceModes.isEmpty
+                ? displayedFaceValue : Configuration().face
+        }
+
+        let index = tag - Self.firstFaceModeTag
+        guard FaceMode.allCases.indices.contains(index) else { return Configuration().face }
+        let selectedMode = FaceMode.allCases[index]
+        return !displayedRandomFace && displayedFaceModes == [selectedMode]
+            ? displayedFaceValue : selectedMode.rawValue
     }
 
     private func synchronizeColorWell(_ well: NSColorWell, with field: NSTextField,
@@ -760,15 +844,23 @@ public final class ConfigurationSheet: NSObject {
             preview.background = backgroundField.stringValue
         }
         preview.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
-        preview.eyes = eyesBox.state == .on ? eyesField.stringValue : nil
-        preview.tongue = tongueBox.state == .on ? tongueField.stringValue : nil
+        preview.face = selectedFaceValue()
+        let renderedFace = preview.wantsRandomFace ? previewRandomFace : preview.resolvedFace
 
         let bytes = CowRenderer.render(message: "Moo!", cowfile: BuiltIn.defaultCow,
-                                       mode: preview.balloonMode, face: preview.resolvedFace,
+                                       mode: preview.balloonMode, face: renderedFace,
                                        wrapColumns: 40)
         previewField.stringValue = String(decoding: bytes, as: UTF8.self)
         previewField.textColor = NSColor(preview.resolvedForeground)
         previewField.backgroundColor = NSColor(preview.resolvedBackground)
+    }
+
+    /// One complete, valid cowsay face for the Settings preview. The engine owns the seeded
+    /// rotation-time generator; this independent UI sample is intentionally just visual.
+    private func nextPreviewRandomFace() -> Face {
+        let index = Int.random(in: 0 ... FaceMode.allCases.count, using: &previewRandomGenerator)
+        guard index > 0 else { return .default }
+        return Face.construct(modes: [FaceMode.allCases[index - 1]])
     }
 
     private static func opaqueHex(_ color: NSColor) -> String {
