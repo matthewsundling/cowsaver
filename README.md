@@ -75,7 +75,7 @@ Cowsaver reads its settings from:
 
 Create or edit that file to change the rotation interval, cow selection, appearance, and layout. The Options sheet is a convenience when macOS makes it available; the config file is the supported configuration path.
 
-The [configuration reference](docs/configuration.md) documents every key, its default, and what happens when a value is wrong. [`docs/config.example.json`](docs/config.example.json) contains every nonoptional default to copy and edit; `.build/debug/cowsaver-cli --print-default-config` prints the shipped defaults.
+The [configuration reference](docs/configuration.md) documents every key, its default, and what happens when a value is wrong. [`docs/config.example.json`](docs/config.example.json) contains every default to copy and edit; `.build/debug/cowsaver-cli --print-default-config` prints the shipped defaults.
 
 Cowsaver includes 47 of the 51 cowfiles distributed with cowsay 3.8.4; the four omitted cowfiles rely on executable Perl rather than static cow art. Unlike cowsay’s configurable `COWPATH`, Cowsaver uses this bundled set. The [configuration reference](docs/configuration.md) lists the 47 names.
 
@@ -83,10 +83,10 @@ The screensaver's Options sheet and the app's settings window are two views of t
 
 The scrollable settings window groups Timing, Cow Selection, Appearance, Placement and Sizing,
 and Configuration. It includes custom colors with system color wells, `say`/`think`/`random`
-balloons, optional custom eyes and tongue, and a live cow preview. `wrapWidth`,
-`maxFortuneLines`, `fontSize`, `face`, `fontName`, `weightByFile`, and `debugFrame` remain
-file-only and survive panel saves and Restore Defaults. Custom quotes and cowfile management also
-remain file-based.
+balloons, the eight cowsay eye modes plus a random choice with automatically derived tongues, and
+a live cow preview. `wrapWidth`, `maxFortuneLines`, `fontSize`, `fontName`, `weightByFile`, and `debugFrame`
+remain file-only and survive panel saves and Restore Defaults. Custom quotes and cowfile
+management also remain file-based.
 
 ## The standalone app
 

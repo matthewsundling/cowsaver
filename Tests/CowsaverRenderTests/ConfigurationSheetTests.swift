@@ -61,8 +61,7 @@ struct ConfigurationSheetTests {
         configuration.wrapWidth = 55
         configuration.theme = "amber"
         configuration.balloonStyle = "think"
-        configuration.eyes = "ABCD"
-        configuration.tongue = "Q "
+        configuration.face = "tired"
         configuration.reposition = false
         configuration.cowfiles = ["dragon", "tux"]
 
@@ -71,10 +70,7 @@ struct ConfigurationSheetTests {
         #expect(sheet.rotationField.stringValue == "12")
         #expect(sheet.themePopup.titleOfSelectedItem == "amber")
         #expect(sheet.stylePopup.titleOfSelectedItem == "think")
-        #expect(sheet.eyesBox.state == .on)
-        #expect(sheet.eyesField.stringValue == "ABCD")
-        #expect(sheet.tongueBox.state == .on)
-        #expect(sheet.tongueField.stringValue == "Q ")
+        #expect(sheet.facePopup.titleOfSelectedItem == "-t Tired (--)")
         #expect(sheet.repositionBox.state == .off)
         #expect(sheet.cowfileBoxes.filter { $0.state == .on }.map(\.title) == ["dragon", "tux"])
     }
@@ -82,14 +78,36 @@ struct ConfigurationSheetTests {
     @Test func sectionsAreTitledAndOrderedWithCowControlsTogether() throws {
         let sheet = makeSheet(saving: Saved())
         #expect(sheet.sectionTitles.map(\.stringValue) == [
-            "Timing", "Cow Selection", "Appearance", "Placement and Sizing", "Configuration",
+            "[Timing]", "[Cow Selection]", "[Appearance]", "[Placement and Sizing]",
+            "[Configuration]",
         ])
 
         let arranged = sheet.settingsStack.arrangedSubviews
+        for title in sheet.sectionTitles.dropFirst() {
+            let titleIndex = try #require(arranged.firstIndex { $0 === title })
+            #expect(sheet.settingsStack.customSpacing(after: arranged[titleIndex - 1]) == 20,
+                    "later section headings have extra whitespace above them")
+        }
         let randomIndex = try #require(arranged.firstIndex { $0 === sheet.randomCowBox })
         let cowHeaderIndex = try #require(arranged.firstIndex { $0 === sheet.cowSelectionHeader })
         #expect(cowHeaderIndex == randomIndex + 1,
                 "All/None follows Random cow without unrelated controls in between")
+    }
+
+    @Test func eyesPopupListsTheExactCowsayModesInFlagOrder() {
+        let sheet = makeSheet(saving: Saved())
+        #expect(sheet.facePopup.itemTitles == [
+            "Default (oo)",
+            "-b Borg (==)",
+            "-d Dead (xx, tongue U)",
+            "-g Greedy ($$)",
+            "-p Paranoid (@@)",
+            "-s Stoned (**, tongue U)",
+            "-t Tired (--)",
+            "-w Wired (OO)",
+            "-y Youthful (..)",
+            "random",
+        ])
     }
 
     @Test func removedFileOnlyControlsAreAbsent() throws {
@@ -103,6 +121,8 @@ struct ConfigurationSheetTests {
         #expect(!labels.contains { $0.contains("Narrowest wrap") })
         #expect(!labels.contains { $0.contains("Longest fortune") })
         #expect(!labels.contains { $0.contains("Font size (0") })
+        #expect(!labels.contains("Custom eyes"))
+        #expect(!labels.contains("Custom tongue"))
     }
 
     @Test func handsBackEveryControlValueOnOK() throws {
@@ -112,10 +132,7 @@ struct ConfigurationSheetTests {
         sheet.rotationField.stringValue = "20"
         sheet.themePopup.selectItem(withTitle: "paperwhite")
         sheet.stylePopup.selectItem(withTitle: "random")
-        sheet.eyesBox.state = .on
-        sheet.eyesField.stringValue = "  "
-        sheet.tongueBox.state = .on
-        sheet.tongueField.stringValue = "tongue"
+        sheet.facePopup.selectItem(withTitle: "-d Dead (xx, tongue U)")
         sheet.adaptiveWrapBox.state = .off
         sheet.randomCowBox.state = .off
         sheet.repositionBox.state = .off
@@ -131,8 +148,7 @@ struct ConfigurationSheetTests {
         #expect(result.rotationSeconds == 20)
         #expect(result.theme == "paperwhite")
         #expect(result.balloonStyle == "random")
-        #expect(result.eyes == "  ")
-        #expect(result.tongue == "tongue")
+        #expect(result.face == "dead")
         #expect(!result.adaptiveWrap)
         #expect(!result.randomCow)
         #expect(!result.reposition)
@@ -373,7 +389,7 @@ struct ConfigurationSheetTests {
         let saved = Saved()
         let sheet = makeSheet(persister: persistence.persist, saving: saved)
         sheet.rotationField.stringValue = "99"
-        sheet.eyesField.stringValue = "draft"
+        sheet.facePopup.selectItem(withTitle: "-w Wired (OO)")
 
         sheet.save()
 
@@ -381,7 +397,7 @@ struct ConfigurationSheetTests {
         #expect(saved.callCount == 0, "the consumer never runs on a failed write")
         #expect(saved.configuration == nil, "the candidate is not accepted")
         #expect(sheet.rotationField.stringValue == "99", "every edited value is retained")
-        #expect(sheet.eyesField.stringValue == "draft")
+        #expect(sheet.facePopup.titleOfSelectedItem == "-w Wired (OO)")
         #expect(!sheet.errorLabel.isHidden, "the failure is visible")
         #expect(sheet.errorLabel.stringValue.contains("could not save"))
         #expect(sheet.errorLabel.stringValue.contains("config.json"))
@@ -561,38 +577,103 @@ struct ConfigurationSheetTests {
         #expect(abs(color.blueComponent - 0.6) < 0.001)
     }
 
-    @Test func enabledEmptyFaceTextSavesWhileUncheckedTextIsOmitted() throws {
-        let saved = Saved()
-        let sheet = makeSheet(saving: saved)
-        sheet.eyesBox.state = .on
-        sheet.eyesField.stringValue = ""
-        sheet.tongueBox.state = .off
-        sheet.tongueField.stringValue = "unsaved draft"
-        sheet.save()
+    @Test func everyStandardFaceChoiceSavesItsCanonicalName() throws {
+        let choices = [
+            ("Default (oo)", "default"),
+            ("-b Borg (==)", "borg"),
+            ("-d Dead (xx, tongue U)", "dead"),
+            ("-g Greedy ($$)", "greedy"),
+            ("-p Paranoid (@@)", "paranoid"),
+            ("-s Stoned (**, tongue U)", "stoned"),
+            ("-t Tired (--)", "tired"),
+            ("-w Wired (OO)", "wired"),
+            ("-y Youthful (..)", "young"),
+        ]
 
-        let result = try #require(saved.configuration)
-        #expect(result.eyes == "")
-        #expect(result.tongue == nil)
-        #expect(result.jsonObject["eyes"] as? String == "")
-        #expect(result.jsonObject["tongue"] == nil)
+        for (title, expected) in choices {
+            var configuration = Configuration()
+            configuration.face = expected == "default" ? "dead" : "default"
+            let saved = Saved()
+            let sheet = makeSheet(configuration, saving: saved)
+            sheet.facePopup.selectItem(withTitle: title)
+            sheet.save()
+            #expect(try #require(saved.configuration).face == expected)
+        }
     }
 
-    @Test func cowPreviewUpdatesForFaceTextAndHonoursFileFacePrecedence() {
-        var configuration = Configuration()
-        configuration.face = "dead"
-        configuration.eyes = "AB"
-        configuration.tongue = "QQ"
-        let sheet = makeSheet(configuration, saving: Saved())
+    @Test func cowPreviewUpdatesForSelectedEyesAndDerivedTongue() {
+        let sheet = makeSheet(saving: Saved())
+        sheet.facePopup.selectItem(withTitle: "-d Dead (xx, tongue U)")
+        sheet.faceChanged()
         #expect(sheet.previewField.stringValue.contains("(xx)"))
-        #expect(!sheet.previewField.stringValue.contains("(AB)"))
+        #expect(sheet.previewField.stringValue.contains(" U  ||----w |"))
 
-        configuration.face = "default"
-        let ordinary = makeSheet(configuration, saving: Saved())
-        ordinary.eyesField.stringValue = "ZZlong"
-        ordinary.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
-                                                   object: ordinary.eyesField))
-        #expect(ordinary.previewField.stringValue.contains("(ZZ)"),
-                "the live preview renders only the first two bytes")
+        sheet.facePopup.selectItem(withTitle: "-w Wired (OO)")
+        sheet.faceChanged()
+        #expect(sheet.previewField.stringValue.contains("(OO)"))
+        #expect(!sheet.previewField.stringValue.contains(" U  ||----w |"),
+                "non-Dead and non-Stoned modes use cowsay's blank tongue")
+    }
+
+    @Test func randomFacePopupRoundTripsAndKeepsItsPreviewSampleDuringAppearanceEdits() throws {
+        let saved = Saved()
+        let sheet = makeSheet(saving: saved)
+        sheet.facePopup.selectItem(withTitle: "random")
+        sheet.faceChanged()
+
+        let preview = sheet.previewField.stringValue
+        let matchingEyes = ["oo", "==", "xx", "$$", "@@", "**", "--", "OO", ".."]
+            .filter { preview.contains("(\($0))") }
+        #expect(matchingEyes.count == 1, "Random preview must show one whole cowsay face")
+        if let eyes = matchingEyes.first, ["xx", "**"].contains(eyes) {
+            #expect(preview.contains(" U  ||----w |"))
+        } else {
+            #expect(!preview.contains(" U  ||----w |"))
+        }
+
+        sheet.themePopup.selectItem(withTitle: "amber")
+        sheet.themeChanged()
+        #expect(sheet.previewField.stringValue == preview,
+                "theme and color edits retain Random's current preview sample")
+
+        sheet.save()
+        #expect(try #require(saved.configuration).face == "random")
+
+        var reopenedConfiguration = Configuration()
+        reopenedConfiguration.face = "random"
+        let reopened = makeSheet(reopenedConfiguration, saving: Saved())
+        #expect(reopened.facePopup.titleOfSelectedItem == "random")
+    }
+
+    @Test func fileFaceSpellingsAndCombinationsSurviveUntilTheChoiceChanges() throws {
+        var abbreviated = Configuration()
+        abbreviated.face = "d"
+        let abbreviatedSave = Saved()
+        let abbreviatedSheet = makeSheet(abbreviated, saving: abbreviatedSave)
+        #expect(abbreviatedSheet.facePopup.titleOfSelectedItem == "-d Dead (xx, tongue U)")
+        abbreviatedSheet.save()
+        #expect(try #require(abbreviatedSave.configuration).face == "d")
+
+        var combined = Configuration()
+        combined.face = "dead, young"
+        let preserved = Saved()
+        let combinedSheet = makeSheet(combined, saving: preserved)
+        #expect(combinedSheet.facePopup.titleOfSelectedItem ==
+                "File-configured combination: dead, young")
+        #expect(Array(combinedSheet.facePopup.itemTitles.suffix(2)) == [
+            "File-configured combination: dead, young", "random",
+        ], "Random remains the bottom choice when a file-only combination is present")
+        #expect(combinedSheet.previewField.stringValue.contains("(..)"))
+        #expect(combinedSheet.previewField.stringValue.contains(" U  ||----w |"),
+                "dead's tongue persists after young replaces its eyes")
+        combinedSheet.save()
+        #expect(try #require(preserved.configuration).face == "dead, young")
+
+        let replaced = Saved()
+        let replacementSheet = makeSheet(combined, saving: replaced)
+        replacementSheet.facePopup.selectItem(withTitle: "-w Wired (OO)")
+        replacementSheet.save()
+        #expect(try #require(replaced.configuration).face == "wired")
     }
 
     @Test func pinnedFileFontSizeDisablesVariationAndOrdinarySavePreservesBothValues() throws {
@@ -632,7 +713,6 @@ struct ConfigurationSheetTests {
 
     @Test func aCompleteRoundTripPreservesEveryFileOnlySetting() throws {
         var configuration = Configuration()
-        configuration.face = "dead"
         configuration.fontName = "Courier New"
         configuration.wrapWidth = 73
         configuration.maxFortuneLines = 17
@@ -645,7 +725,6 @@ struct ConfigurationSheetTests {
         sheet.save()
 
         let result = try #require(saved.configuration)
-        #expect(result.face == "dead")
         #expect(result.fontName == "Courier New")
         #expect(result.wrapWidth == 73)
         #expect(result.maxFortuneLines == 17)
@@ -657,7 +736,7 @@ struct ConfigurationSheetTests {
     @Test func restoreDefaultsDoesNotPersistAndKeepsFileOnlySettingsUntilOK() throws {
         var configuration = Configuration()
         configuration.rotationSeconds = 5
-        configuration.face = "dead"
+        configuration.face = "dead, young"
         configuration.fontName = "Courier New"
         configuration.wrapWidth = 73
         configuration.maxFortuneLines = 17
@@ -665,8 +744,6 @@ struct ConfigurationSheetTests {
         configuration.foreground = "#123456"
         configuration.background = "#abcdef"
         configuration.theme = nil
-        configuration.eyes = "XX"
-        configuration.tongue = "U "
         configuration.balloonStyle = "random"
         configuration.randomCow = false
         configuration.cowfiles = ["dragon"]
@@ -689,7 +766,7 @@ struct ConfigurationSheetTests {
 
         let result = try #require(saved.configuration)
         #expect(result.rotationSeconds == 45)
-        #expect(result.face == "dead", "file-only settings survive Restore Defaults")
+        #expect(result.face == Configuration().face, "Restore Defaults resets the Eyes popup")
         #expect(result.fontName == "Courier New")
         #expect(result.wrapWidth == 73)
         #expect(result.maxFortuneLines == 17)
@@ -700,8 +777,6 @@ struct ConfigurationSheetTests {
                 "raw colors are controlled by the panel and reset")
         #expect(result.background == Configuration().background)
         #expect(result.theme == Configuration().theme)
-        #expect(result.eyes == nil)
-        #expect(result.tongue == nil)
         #expect(result.balloonStyle == Configuration().balloonStyle)
         #expect(result.randomCow == Configuration().randomCow)
         #expect(result.cowfiles == ["default", "dragon", "stegosaurus", "tux"])

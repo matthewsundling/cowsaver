@@ -31,7 +31,6 @@ func printValidation(_ result: Configuration.LoadResult) {
 ///
 /// Written with the same JSON formatting options the settings window uses to write
 /// `config.json`, so the output is the file the settings window writes after Restore Defaults.
-/// Optional `eyes` and `tongue` values are omitted while unset.
 func printDefaultConfig() -> Never {
     guard let data = try? JSONSerialization.data(withJSONObject: Configuration().jsonObject,
                                                  options: [.prettyPrinted, .sortedKeys]) else {

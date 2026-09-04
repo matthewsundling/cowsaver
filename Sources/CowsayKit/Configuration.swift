@@ -88,11 +88,6 @@ public struct Configuration: Equatable, Sendable {
     public var cowfiles: [String] = ["stegosaurus", "default", "tux", "dragon"]
     public var randomCow: Bool = true
     public var face: String = "default"
-    /// Custom eyes, corresponding to cowsay's `-e`. `nil` means no override; an empty or
-    /// whitespace-only string is an intentional override and is therefore distinct from nil.
-    public var eyes: String?
-    /// Custom tongue, corresponding to cowsay's `-T`. See `eyes` for nil/empty semantics.
-    public var tongue: String?
     public var balloonStyle: String = "say"
     public var fontName: String = "Menlo"
     /// `0` means auto-fit: pick the largest size that fits, once per rotation.
@@ -123,13 +118,12 @@ public struct Configuration: Equatable, Sendable {
     public init() {}
 
     /// Every key this configuration understands. A key outside this list warns on load. The
-    /// documentation tests require each one in the reference and every nonoptional one in the
-    /// default example.
+    /// documentation tests require each one in both the reference and default example.
     public static let knownKeys = [
-        "rotationSeconds", "wrapWidth", "cowfiles", "randomCow", "face", "eyes", "tongue",
-        "balloonStyle", "fontName", "fontSize", "sizeVariation", "foreground", "background",
-        "theme", "transition", "reposition", "adaptiveWrap", "maxFortuneLines",
-        "weightByFile", "debugFrame",
+        "rotationSeconds", "wrapWidth", "cowfiles", "randomCow", "face", "balloonStyle",
+        "fontName", "fontSize", "sizeVariation", "foreground", "background", "theme",
+        "transition", "reposition", "adaptiveWrap", "maxFortuneLines", "weightByFile",
+        "debugFrame",
     ]
 
     /// Shared operating bounds for file decoding and defensive use of configurations built
@@ -186,15 +180,17 @@ public struct Configuration: Equatable, Sendable {
         parseFace(face).modes
     }
 
-    /// The face every renderer should use. `Face.construct` applies custom values first,
-    /// truncates them to cowsay's first two UTF-8 bytes, and then applies file-configured
-    /// face modes in cowsay's precedence order.
+    /// Whether this configuration asks the engine to choose one complete cowsay face for
+    /// each rendered block. `random` is deliberately valid only as the complete value, not
+    /// as one member of a file-configured combination of modes.
+    public var wantsRandomFace: Bool {
+        parseFace(face).isRandom
+    }
+
+    /// The face every renderer should use. Face modes supply eyes and, for Dead and Stoned,
+    /// cowsay's `U ` tongue in cowsay's precedence order.
     public var resolvedFace: Face {
-        Face.construct(
-            customEyes: eyes.map(Bytes.from),
-            customTongue: tongue.map(Bytes.from),
-            modes: faceModes
-        )
+        Face.construct(modes: faceModes)
     }
 
     /// A named theme wins over raw hex values, so `"theme": "amber"` does what it looks
@@ -239,10 +235,6 @@ public struct Configuration: Equatable, Sendable {
         ]
         // Omit an unset theme so raw foreground and background values remain active.
         if let theme { object["theme"] = theme }
-        // Nil means the corresponding panel control is unchecked. Empty and whitespace-only
-        // strings are intentional cowsay overrides and must remain present.
-        if let eyes { object["eyes"] = eyes }
-        if let tongue { object["tongue"] = tongue }
         return object
     }
 
@@ -254,6 +246,7 @@ public struct Configuration: Equatable, Sendable {
 private struct ParsedFace {
     let normalized: String
     let modes: Set<FaceMode>
+    let isRandom: Bool
     let rejectedTokens: [String]
     let recognizedAnyToken: Bool
 }
@@ -261,6 +254,16 @@ private struct ParsedFace {
 /// Keep file normalization and the defensive behavior for directly constructed
 /// configurations on one token grammar.
 private func parseFace(_ value: String) -> ParsedFace {
+    // Random selects one whole cowsay face, including its matching tongue, at render time.
+    // It cannot sensibly compose with a concrete mode, so only this standalone spelling is
+    // accepted. Mixed values continue through the ordinary token recovery below, where the
+    // concrete modes survive and `random` is reported as rejected.
+    if value.trimmingCharacters(in: .whitespacesAndNewlines)
+        .caseInsensitiveCompare("random") == .orderedSame {
+        return ParsedFace(normalized: "random", modes: [], isRandom: true,
+                          rejectedTokens: [], recognizedAnyToken: true)
+    }
+
     let tokens = value.split(whereSeparator: { $0 == "," || $0.isWhitespace })
     var normalizedModes: [String] = []
     var modes: Set<FaceMode> = []
@@ -287,6 +290,7 @@ private func parseFace(_ value: String) -> ParsedFace {
     return ParsedFace(
         normalized: normalizedModes.isEmpty ? "default" : normalizedModes.joined(separator: ", "),
         modes: modes,
+        isRandom: false,
         rejectedTokens: rejectedTokens,
         recognizedAnyToken: recognizedAnyToken
     )
@@ -505,14 +509,6 @@ public extension Configuration {
             }
             return parsed.normalized
         }
-        func optionalFaceText(_ key: String) -> String? {
-            guard let raw = object[key] else { return nil }
-            guard let value = raw as? String else {
-                warnings.append("\(key): expected a string; leaving unset")
-                return nil
-            }
-            return value
-        }
         func fontName() -> String? {
             guard let raw = object["fontName"] else { return nil }
             guard let value = raw as? String else {
@@ -572,8 +568,6 @@ public extension Configuration {
         if let value = cowfiles() { configuration.cowfiles = value }
         if let value = boolean("randomCow") { configuration.randomCow = value }
         if let value = face() { configuration.face = value }
-        if object["eyes"] != nil { configuration.eyes = optionalFaceText("eyes") }
-        if object["tongue"] != nil { configuration.tongue = optionalFaceText("tongue") }
         if let value = categorical("balloonStyle", allowed: ["say", "think", "random"],
                                    default: defaults.balloonStyle) {
             configuration.balloonStyle = value

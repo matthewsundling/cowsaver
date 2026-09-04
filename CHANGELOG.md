@@ -6,8 +6,9 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Added
 
-- Settings controls for custom foreground/background colors, custom cow eyes and tongue, and
-  random speech/thought balloons, plus a compact live cow preview.
+- Settings controls for custom foreground/background colors, the eight cowsay eye modes plus a
+  random face choice with automatically derived tongues, and random speech/thought balloons,
+  plus a compact live cow preview.
 
 ### Changed
 
@@ -16,6 +17,10 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   `fontSize` are now file-only while remaining fully supported and preserved by panel saves.
 - Random balloon selection uses an independent seeded sequence and retains one choice across
   adaptive-wrap candidates, leaving existing cow and fortune sequences unchanged.
+- Random face selection likewise uses its own seeded sequence, chooses a complete cowsay face
+  (including its matching tongue) per rotation, and retains that face across adaptive-wrap
+  candidates.
+- Settings section headings are bracketed and separated with additional whitespace.
 
 ## [1.1] - 2026-08-23
 
