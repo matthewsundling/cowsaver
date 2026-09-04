@@ -82,7 +82,7 @@ the problem and clicking OK again retries with the values still in the window. A
 | `rotationSeconds` | whole number | `45` | 1–600 seconds. |
 | `wrapWidth` | whole number | `40` | File-only. 2–500 columns. |
 | `cowfiles` | array | `["stegosaurus", "default", "tux", "dragon"]` | Ordered, unique, exact cowfile names; `[]` means every loadable cowfile. |
-| `randomCow` | boolean | `true` | — |
+| `randomCow` | boolean | `true` | `true` chooses a cow at random; `false` cycles the enabled cows in order. |
 | `face` | string | `"default"` | `random`, face names, single letters, or a comma- or space-separated list. The settings window offers Default, one named mode, or Random. |
 | `balloonStyle` | string | `"say"` | `say`, `think`, or `random`, case-insensitively; invalid values warn and use `say`. |
 | `fontName` | string | `"Menlo"` | File-only. A non-empty name; rendering requires fixed pitch and otherwise uses a fallback chain. |
@@ -128,7 +128,8 @@ form. When Cowsaver writes the file again, mixed-case input such as `"ThInK"` th
   recovery logs which fallback was chosen. A value other than an array warns and uses the default
   four-name list.
 - **`randomCow`** picks a new cowfile each rotation, avoiding the last few. Set it to
-  `false` to keep one cow: the first name in `cowfiles` that actually loaded.
+  `false` to cycle through the enabled cowfiles in order, returning to the first after the
+  last. Choose just one cowfile to keep that cow on every rotation.
 - **`maxFortuneLines`** is a corpus filter, not a truncation. A fortune taller than this
   when wrapped at `wrapWidth` is dropped when the collection is loaded, so it never appears.
   Raising it admits longer fortunes, which auto-fit then draws at a smaller size. `0` keeps
@@ -336,7 +337,7 @@ with comments added:
   "fontSize" : 0,                      // 0 fits each fortune to the screen
   "foreground" : "#33FF66",            // ignored while "theme" names a preset
   "maxFortuneLines" : 60,              // taller fortunes are never shown; 0 for no limit
-  "randomCow" : true,                  // false pins the first loadable cowfile above
+  "randomCow" : true,                  // false cycles the loadable cowfiles above in order
   "reposition" : true,                 // false centres every fortune
   "rotationSeconds" : 45,              // whole seconds, 1-600
   "sizeVariation" : 0,                 // above 0, varies the fitted size per rotation
