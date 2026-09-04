@@ -61,17 +61,48 @@ struct ConfigurationSheetTests {
         configuration.wrapWidth = 55
         configuration.theme = "amber"
         configuration.balloonStyle = "think"
+        configuration.eyes = "ABCD"
+        configuration.tongue = "Q "
         configuration.reposition = false
         configuration.cowfiles = ["dragon", "tux"]
 
         let sheet = makeSheet(configuration, saving: Saved())
 
         #expect(sheet.rotationField.stringValue == "12")
-        #expect(sheet.wrapField.stringValue == "55")
         #expect(sheet.themePopup.titleOfSelectedItem == "amber")
         #expect(sheet.stylePopup.titleOfSelectedItem == "think")
+        #expect(sheet.eyesBox.state == .on)
+        #expect(sheet.eyesField.stringValue == "ABCD")
+        #expect(sheet.tongueBox.state == .on)
+        #expect(sheet.tongueField.stringValue == "Q ")
         #expect(sheet.repositionBox.state == .off)
         #expect(sheet.cowfileBoxes.filter { $0.state == .on }.map(\.title) == ["dragon", "tux"])
+    }
+
+    @Test func sectionsAreTitledAndOrderedWithCowControlsTogether() throws {
+        let sheet = makeSheet(saving: Saved())
+        #expect(sheet.sectionTitles.map(\.stringValue) == [
+            "Timing", "Cow Selection", "Appearance", "Placement and Sizing", "Configuration",
+        ])
+
+        let arranged = sheet.settingsStack.arrangedSubviews
+        let randomIndex = try #require(arranged.firstIndex { $0 === sheet.randomCowBox })
+        let cowHeaderIndex = try #require(arranged.firstIndex { $0 === sheet.cowSelectionHeader })
+        #expect(cowHeaderIndex == randomIndex + 1,
+                "All/None follows Random cow without unrelated controls in between")
+    }
+
+    @Test func removedFileOnlyControlsAreAbsent() throws {
+        let sheet = makeSheet(saving: Saved())
+        func strings(in view: NSView) -> [String] {
+            let own = (view as? NSTextField).map { [$0.stringValue] } ?? []
+            return own + view.subviews.flatMap(strings)
+        }
+        let content = try #require(sheet.window.contentView)
+        let labels = strings(in: content)
+        #expect(!labels.contains { $0.contains("Narrowest wrap") })
+        #expect(!labels.contains { $0.contains("Longest fortune") })
+        #expect(!labels.contains { $0.contains("Font size (0") })
     }
 
     @Test func handsBackEveryControlValueOnOK() throws {
@@ -79,11 +110,12 @@ struct ConfigurationSheetTests {
         let sheet = makeSheet(saving: saved)
 
         sheet.rotationField.stringValue = "20"
-        sheet.wrapField.stringValue = "48"
-        sheet.maxLinesField.stringValue = "9"
-        sheet.fontSizeField.stringValue = "18"
         sheet.themePopup.selectItem(withTitle: "paperwhite")
-        sheet.stylePopup.selectItem(withTitle: "think")
+        sheet.stylePopup.selectItem(withTitle: "random")
+        sheet.eyesBox.state = .on
+        sheet.eyesField.stringValue = "  "
+        sheet.tongueBox.state = .on
+        sheet.tongueField.stringValue = "tongue"
         sheet.adaptiveWrapBox.state = .off
         sheet.randomCowBox.state = .off
         sheet.repositionBox.state = .off
@@ -97,11 +129,10 @@ struct ConfigurationSheetTests {
 
         let result = try #require(saved.configuration)
         #expect(result.rotationSeconds == 20)
-        #expect(result.wrapWidth == 48)
-        #expect(result.maxFortuneLines == 9)
-        #expect(result.fontSize == 18)
         #expect(result.theme == "paperwhite")
-        #expect(result.balloonStyle == "think")
+        #expect(result.balloonStyle == "random")
+        #expect(result.eyes == "  ")
+        #expect(result.tongue == "tongue")
         #expect(!result.adaptiveWrap)
         #expect(!result.randomCow)
         #expect(!result.reposition)
@@ -342,7 +373,7 @@ struct ConfigurationSheetTests {
         let saved = Saved()
         let sheet = makeSheet(persister: persistence.persist, saving: saved)
         sheet.rotationField.stringValue = "99"
-        sheet.wrapField.stringValue = "77"
+        sheet.eyesField.stringValue = "draft"
 
         sheet.save()
 
@@ -350,7 +381,7 @@ struct ConfigurationSheetTests {
         #expect(saved.callCount == 0, "the consumer never runs on a failed write")
         #expect(saved.configuration == nil, "the candidate is not accepted")
         #expect(sheet.rotationField.stringValue == "99", "every edited value is retained")
-        #expect(sheet.wrapField.stringValue == "77")
+        #expect(sheet.eyesField.stringValue == "draft")
         #expect(!sheet.errorLabel.isHidden, "the failure is visible")
         #expect(sheet.errorLabel.stringValue.contains("could not save"))
         #expect(sheet.errorLabel.stringValue.contains("config.json"))
@@ -435,59 +466,6 @@ struct ConfigurationSheetTests {
                       messageContains: "Seconds between fortunes")
     }
 
-    @Test("Narrowest wrap column rejects invalid input", arguments: [
-        ("1", "one below the lower bound"),
-        ("501", "one above the upper bound"),
-        ("40.5", "a fraction"),
-        ("banana", "non-numeric text"),
-        ("", "empty text"),
-        ("   ", "whitespace-only text"),
-        ("nan", "NaN"),
-        ("inf", "positive infinity"),
-        ("-inf", "negative infinity"),
-        ("1e300", "a huge positive value"),
-        ("-1e300", "a huge negative value"),
-    ])
-    func wrapWidthRejectsInvalidInput(text: String, why: String) {
-        assertRejects(\.wrapField, text: text, why: why,
-                      messageContains: "Narrowest wrap column")
-    }
-
-    @Test("Longest fortune, in lines rejects invalid input", arguments: [
-        ("-1", "one below the lower bound"),
-        ("101", "one above the upper bound"),
-        ("5.5", "a fraction"),
-        ("banana", "non-numeric text"),
-        ("", "empty text"),
-        ("   ", "whitespace-only text"),
-        ("nan", "NaN"),
-        ("inf", "positive infinity"),
-        ("-inf", "negative infinity"),
-        ("1e300", "a huge positive value"),
-        ("-1e300", "a huge negative value"),
-    ])
-    func maxFortuneLinesRejectsInvalidInput(text: String, why: String) {
-        assertRejects(\.maxLinesField, text: text, why: why,
-                      messageContains: "Longest fortune, in lines")
-    }
-
-    @Test("Font size rejects invalid input", arguments: [
-        ("-1", "a negative value"),
-        ("3", "a positive value below 6"),
-        ("145", "one above 144"),
-        ("banana", "non-numeric text"),
-        ("", "empty text"),
-        ("   ", "whitespace-only text"),
-        ("nan", "NaN"),
-        ("inf", "positive infinity"),
-        ("-inf", "negative infinity"),
-        ("1e300", "a huge positive value"),
-        ("-1e300", "a huge negative value"),
-    ])
-    func fontSizeRejectsInvalidInput(text: String, why: String) {
-        assertRejects(\.fontSizeField, text: text, why: why, messageContains: "Font size")
-    }
-
     @Test func rotationSecondsAcceptsItsBoundariesAndWholeDecimalSpellings() throws {
         for (text, expected) in [("1", 1.0), ("600", 600.0), ("45.0", 45.0)] {
             let saved = Saved()
@@ -501,66 +479,164 @@ struct ConfigurationSheetTests {
         }
     }
 
-    @Test func wrapWidthAcceptsItsBoundariesAndWholeDecimalSpellings() throws {
-        for (text, expected) in [("2", 2), ("500", 500), ("40.0", 40)] {
-            let saved = Saved()
-            let sheet = makeSheet(saving: saved)
-            sheet.wrapField.stringValue = text
-
-            sheet.save()
-
-            #expect(try #require(saved.configuration).wrapWidth == expected,
-                    "\(text) should be accepted")
-        }
-    }
-
-    @Test func maxFortuneLinesAcceptsItsBoundaries() throws {
-        for (text, expected) in [("0", 0), ("100", 100)] {
-            let saved = Saved()
-            let sheet = makeSheet(saving: saved)
-            sheet.maxLinesField.stringValue = text
-
-            sheet.save()
-
-            #expect(try #require(saved.configuration).maxFortuneLines == expected,
-                    "\(text) should be accepted")
-        }
-    }
-
-    @Test func fontSizeAcceptsAutoFitBoundariesAndInRangeDecimals() throws {
-        for (text, expected) in [("0", 0.0), ("6", 6.0), ("144", 144.0), ("18.5", 18.5)] {
-            let saved = Saved()
-            let sheet = makeSheet(saving: saved)
-            sheet.fontSizeField.stringValue = text
-
-            sheet.save()
-
-            #expect(try #require(saved.configuration).fontSize == expected,
-                    "\(text) should be accepted")
-        }
-    }
-
     // MARK: - Round trip and existing meanings
 
-    @Test func loadedDecimalFontSizeSurvivesDisplayAndSaveUnchanged() throws {
-        var configuration = Configuration()
-        configuration.fontSize = 18.5
+    @Test func customColorControlsTrackThemeVisibilityAndPreserveTypedSpelling() throws {
         let saved = Saved()
-        let sheet = makeSheet(configuration, saving: saved)
+        let sheet = makeSheet(saving: saved)
+        #expect(sheet.customColorRows.allSatisfy { $0.isHidden },
+                "a named theme hides raw colors")
 
-        #expect(sheet.fontSizeField.stringValue == "18.5", "must not truncate the loaded decimal")
+        sheet.themePopup.selectItem(withTitle: "custom colors")
+        sheet.themeChanged()
+        #expect(sheet.customColorRows.allSatisfy { !$0.isHidden })
+        sheet.foregroundField.stringValue = "aBc"
+        sheet.backgroundField.stringValue = "123456"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.foregroundField))
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.backgroundField))
+        sheet.save()
+
+        let result = try #require(saved.configuration)
+        #expect(result.theme == nil)
+        #expect(result.foreground == "aBc")
+        #expect(result.background == "123456")
+    }
+
+    @Test func invalidVisibleCustomColorBlocksSaveAndFocusesItsField() {
+        let persistence = Persistence()
+        let sheet = makeSheet(persister: persistence.persist, saving: Saved())
+        sheet.themePopup.selectItem(withTitle: "custom colors")
+        sheet.themeChanged()
+        sheet.foregroundField.stringValue = "not a color"
 
         sheet.save()
 
-        #expect(try #require(saved.configuration).fontSize == 18.5)
+        #expect(persistence.calls.isEmpty)
+        #expect(sheet.errorLabel.stringValue.contains("Foreground"))
+        #expect(sheet.foregroundField.currentEditor() != nil)
+    }
+
+    @Test func namedThemeKeepsValidCustomDraftsButIgnoresInvalidHiddenOnes() throws {
+        var configuration = Configuration()
+        configuration.foreground = "#123456"
+        configuration.background = "#654321"
+        let saved = Saved()
+        let sheet = makeSheet(configuration, saving: saved)
+        sheet.foregroundField.stringValue = "invalid"
+        sheet.backgroundField.stringValue = "AbC"
+        sheet.themePopup.selectItem(withTitle: "amber")
+        sheet.themeChanged()
+
+        sheet.save()
+
+        let result = try #require(saved.configuration)
+        #expect(result.theme == "amber")
+        #expect(result.foreground == "#123456", "a hidden invalid draft never persists")
+        #expect(result.background == "AbC", "a valid custom draft remains available")
+    }
+
+    @Test func colorWellWritesOpaqueUppercaseSixDigitHexAndUpdatesPreview() {
+        let sheet = makeSheet(saving: Saved())
+        sheet.themePopup.selectItem(withTitle: "custom colors")
+        sheet.themeChanged()
+        sheet.foregroundWell.color = NSColor(srgbRed: 26.0 / 255.0, green: 128.0 / 255.0,
+                                             blue: 1, alpha: 0.25)
+        sheet.colorWellChanged(sheet.foregroundWell)
+
+        #expect(sheet.foregroundField.stringValue == "#1A80FF")
+        #expect(abs(sheet.previewField.textColor!.redComponent - 26.0 / 255.0) < 0.001)
+    }
+
+    @Test func typedColorsSynchronizeTheirWells() {
+        let sheet = makeSheet(saving: Saved())
+        sheet.foregroundField.stringValue = "#369"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.foregroundField))
+
+        let color = sheet.foregroundWell.color.usingColorSpace(.sRGB)!
+        #expect(abs(color.redComponent - 0.2) < 0.001)
+        #expect(abs(color.greenComponent - 0.4) < 0.001)
+        #expect(abs(color.blueComponent - 0.6) < 0.001)
+    }
+
+    @Test func enabledEmptyFaceTextSavesWhileUncheckedTextIsOmitted() throws {
+        let saved = Saved()
+        let sheet = makeSheet(saving: saved)
+        sheet.eyesBox.state = .on
+        sheet.eyesField.stringValue = ""
+        sheet.tongueBox.state = .off
+        sheet.tongueField.stringValue = "unsaved draft"
+        sheet.save()
+
+        let result = try #require(saved.configuration)
+        #expect(result.eyes == "")
+        #expect(result.tongue == nil)
+        #expect(result.jsonObject["eyes"] as? String == "")
+        #expect(result.jsonObject["tongue"] == nil)
+    }
+
+    @Test func cowPreviewUpdatesForFaceTextAndHonoursFileFacePrecedence() {
+        var configuration = Configuration()
+        configuration.face = "dead"
+        configuration.eyes = "AB"
+        configuration.tongue = "QQ"
+        let sheet = makeSheet(configuration, saving: Saved())
+        #expect(sheet.previewField.stringValue.contains("(xx)"))
+        #expect(!sheet.previewField.stringValue.contains("(AB)"))
+
+        configuration.face = "default"
+        let ordinary = makeSheet(configuration, saving: Saved())
+        ordinary.eyesField.stringValue = "ZZlong"
+        ordinary.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                   object: ordinary.eyesField))
+        #expect(ordinary.previewField.stringValue.contains("(ZZ)"),
+                "the live preview renders only the first two bytes")
+    }
+
+    @Test func pinnedFileFontSizeDisablesVariationAndOrdinarySavePreservesBothValues() throws {
+        var configuration = Configuration()
+        configuration.fontSize = 18.5
+        configuration.sizeVariation = 0.75
+        let saved = Saved()
+        let sheet = makeSheet(configuration, saving: saved)
+
+        #expect(!sheet.sizeVariationBox.isEnabled)
+        #expect(sheet.sizeVariationBox.state == .on)
+        #expect(!sheet.pinnedFontSizeCaption.isHidden)
+        #expect(sheet.pinnedFontSizeCaption.stringValue.contains("18.5"))
+        sheet.save()
+
+        let result = try #require(saved.configuration)
+        #expect(result.fontSize == 18.5)
+        #expect(result.sizeVariation == 0.75)
+    }
+
+    @Test func restoreDefaultsResetsDisabledVariationWithoutChangingPinnedFontSize() throws {
+        var configuration = Configuration()
+        configuration.fontSize = 22
+        configuration.sizeVariation = 0.75
+        let saved = Saved()
+        let sheet = makeSheet(configuration, saving: saved)
+
+        sheet.apply(Configuration())
+        #expect(!sheet.sizeVariationBox.isEnabled)
+        #expect(sheet.sizeVariationBox.state == .off)
+        sheet.save()
+
+        let result = try #require(saved.configuration)
+        #expect(result.fontSize == 22)
+        #expect(result.sizeVariation == 0)
     }
 
     @Test func aCompleteRoundTripPreservesEveryFileOnlySetting() throws {
         var configuration = Configuration()
         configuration.face = "dead"
         configuration.fontName = "Courier New"
-        configuration.foreground = "#123456"
-        configuration.background = "#abcdef"
+        configuration.wrapWidth = 73
+        configuration.maxFortuneLines = 17
+        configuration.fontSize = 18.5
         configuration.weightByFile = true
         configuration.debugFrame = true
         let saved = Saved()
@@ -571,8 +647,9 @@ struct ConfigurationSheetTests {
         let result = try #require(saved.configuration)
         #expect(result.face == "dead")
         #expect(result.fontName == "Courier New")
-        #expect(result.foreground == "#123456")
-        #expect(result.background == "#abcdef")
+        #expect(result.wrapWidth == 73)
+        #expect(result.maxFortuneLines == 17)
+        #expect(result.fontSize == 18.5)
         #expect(result.weightByFile)
         #expect(result.debugFrame)
     }
@@ -582,8 +659,21 @@ struct ConfigurationSheetTests {
         configuration.rotationSeconds = 5
         configuration.face = "dead"
         configuration.fontName = "Courier New"
+        configuration.wrapWidth = 73
+        configuration.maxFortuneLines = 17
+        configuration.fontSize = 18.5
         configuration.foreground = "#123456"
         configuration.background = "#abcdef"
+        configuration.theme = nil
+        configuration.eyes = "XX"
+        configuration.tongue = "U "
+        configuration.balloonStyle = "random"
+        configuration.randomCow = false
+        configuration.cowfiles = ["dragon"]
+        configuration.reposition = false
+        configuration.adaptiveWrap = false
+        configuration.sizeVariation = 0.4
+        configuration.transition = "none"
         configuration.weightByFile = true
         configuration.debugFrame = true
         let persistence = Persistence()
@@ -601,10 +691,24 @@ struct ConfigurationSheetTests {
         #expect(result.rotationSeconds == 45)
         #expect(result.face == "dead", "file-only settings survive Restore Defaults")
         #expect(result.fontName == "Courier New")
-        #expect(result.foreground == "#123456")
-        #expect(result.background == "#abcdef")
+        #expect(result.wrapWidth == 73)
+        #expect(result.maxFortuneLines == 17)
+        #expect(result.fontSize == 18.5)
         #expect(result.weightByFile)
         #expect(result.debugFrame)
+        #expect(result.foreground == Configuration().foreground,
+                "raw colors are controlled by the panel and reset")
+        #expect(result.background == Configuration().background)
+        #expect(result.theme == Configuration().theme)
+        #expect(result.eyes == nil)
+        #expect(result.tongue == nil)
+        #expect(result.balloonStyle == Configuration().balloonStyle)
+        #expect(result.randomCow == Configuration().randomCow)
+        #expect(result.cowfiles == ["default", "dragon", "stegosaurus", "tux"])
+        #expect(result.reposition == Configuration().reposition)
+        #expect(result.adaptiveWrap == Configuration().adaptiveWrap)
+        #expect(result.sizeVariation == Configuration().sizeVariation)
+        #expect(result.transition == Configuration().transition)
     }
 
     @Test func restoreDefaultsClearsAStaleValidationMessage() {
@@ -631,9 +735,6 @@ struct ConfigurationSheetTests {
         let sheet = makeSheet(configuration, saving: saved)
 
         #expect(sheet.rotationField.stringValue == "45")
-        #expect(sheet.wrapField.stringValue == "500")
-        #expect(sheet.maxLinesField.stringValue == "0")
-        #expect(sheet.fontSizeField.stringValue == "0")
         #expect(sheet.sizeVariationBox.state == .off,
                 "a non-finite direct value behaves as the default 0")
 

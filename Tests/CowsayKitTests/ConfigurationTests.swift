@@ -23,7 +23,8 @@ struct ConfigurationTests {
     @Test func readsAFullConfigFile() {
         let result = load("""
         {"rotationSeconds": 20, "wrapWidth": 60, "cowfiles": ["tux"], "randomCow": false,
-         "face": "tired", "balloonStyle": "think", "fontName": "Monaco", "fontSize": 18,
+         "face": "tired", "eyes": "ABCD", "tongue": "Q ", "balloonStyle": "think",
+         "fontName": "Monaco", "fontSize": 18,
          "foreground": "#FFB000", "background": "#101010", "transition": "none",
          "reposition": false, "adaptiveWrap": false, "maxFortuneLines": 30,
          "weightByFile": true, "debugFrame": true}
@@ -34,6 +35,8 @@ struct ConfigurationTests {
         #expect(c.cowfiles == ["tux"])
         #expect(c.balloonMode == .think)
         #expect(c.faceModes == [.tired])
+        #expect(c.eyes == "ABCD")
+        #expect(c.tongue == "Q ")
         #expect(!c.wantsTransition)
         #expect(!c.adaptiveWrap)
         #expect(c.maxFortuneLines == 30)
@@ -275,7 +278,9 @@ struct ConfigurationTests {
     /// the warning is noise on a perfectly good config.
     @Test func noKeyTheLoaderKnowsIsReportedAsUnknown() {
         var configuration = Configuration()
-        configuration.theme = "amber"   // the one key jsonObject omits while it is unset
+        configuration.theme = "amber"
+        configuration.eyes = "oo"
+        configuration.tongue = "  "
         #expect(Set(configuration.jsonObject.keys) == Set(Configuration.knownKeys))
 
         let result = Configuration.load(object: configuration.jsonObject)
@@ -521,7 +526,7 @@ struct ConfigurationTests {
     // MARK: Categorical strings, face, and font
 
     @Test func balloonAndTransitionAcceptEveryOption() {
-        for (key, values) in [("balloonStyle", ["say", "think"]),
+        for (key, values) in [("balloonStyle", ["say", "think", "random"]),
                               ("transition", ["fade", "none"])] {
             for value in values {
                 let result = load("{\"\(key)\": \"\(value)\"}")
@@ -622,6 +627,54 @@ struct ConfigurationTests {
         let result = load("{\"face\": [\"dead\"]}")
         #expect(result.configuration.face == "default")
         #expect(warning(result, for: "face", containing: "using default"))
+    }
+
+    @Test func optionalEyesAndTonguePreserveEveryStringExactly() {
+        for (key, value) in [
+            ("eyes", ""), ("eyes", "  "), ("eyes", "é🙂long"),
+            ("tongue", ""), ("tongue", " \t"), ("tongue", "牛舌long"),
+        ] {
+            let result = Configuration.load(object: [key: value])
+            #expect(result.warnings.isEmpty)
+            #expect(result.configuration.jsonObject[key] as? String == value)
+        }
+    }
+
+    @Test func missingEyesAndTongueStayUnsetAndAreOmitted() {
+        let result = load("{}")
+        #expect(result.configuration.eyes == nil)
+        #expect(result.configuration.tongue == nil)
+        #expect(result.configuration.jsonObject["eyes"] == nil)
+        #expect(result.configuration.jsonObject["tongue"] == nil)
+    }
+
+    @Test func wrongTypeEyesAndTongueWarnAndRecoverToUnset() {
+        for key in ["eyes", "tongue"] {
+            for value: Any in [NSNull(), 12, false, ["oo"]] {
+                let result = Configuration.load(object: [key: value])
+                #expect(result.configuration.jsonObject[key] == nil)
+                #expect(warning(result, for: key, containing: "leaving unset"))
+            }
+        }
+    }
+
+    @Test func resolvedFaceUsesOnlyTheFirstTwoUTF8Bytes() {
+        var configuration = Configuration()
+        configuration.eyes = "éyes"
+        configuration.tongue = "🙂"
+        #expect(configuration.resolvedFace.eyes == Array("é".utf8))
+        #expect(configuration.resolvedFace.tongue == Array("🙂".utf8.prefix(2)))
+    }
+
+    @Test func fileFaceModesKeepCowsayPrecedenceOverCustomValues() {
+        var configuration = Configuration()
+        configuration.eyes = "AB"
+        configuration.tongue = "QQ"
+        configuration.face = "dead, young"
+        #expect(configuration.resolvedFace.eyes == Bytes.from(".."),
+                "young overrides custom eyes after dead")
+        #expect(configuration.resolvedFace.tongue == Bytes.from("U "),
+                "dead overrides the custom tongue")
     }
 
     @Test func normalizedFaceModesKeepCowsayPrecedence() {
@@ -745,7 +798,9 @@ struct ConfigurationTests {
         configuration.cowfiles = ["tux", "dragon"]
         configuration.randomCow = false
         configuration.face = "tired"
-        configuration.balloonStyle = "think"
+        configuration.eyes = "ABCD"
+        configuration.tongue = "Q "
+        configuration.balloonStyle = "random"
         configuration.fontName = "Monaco"
         configuration.fontSize = 18
         configuration.sizeVariation = 0.4
@@ -797,9 +852,9 @@ struct ConfigurationTests {
     }
 
     @Test func jsonObjectCoversEveryKnownKey() {
-        // `theme` is absent by default and covered by its own test above.
+        // Optional values are absent by default and covered by their own tests above.
         let written = Set(Configuration().jsonObject.keys)
-        for key in Configuration.knownKeys where key != "theme" {
+        for key in Configuration.knownKeys where !["theme", "eyes", "tongue"].contains(key) {
             #expect(written.contains(key), "\(key) is never written back")
         }
         for key in written {
@@ -810,7 +865,7 @@ struct ConfigurationTests {
     @Test func knownKeysCoverEveryConfigurableField() {
         // A field added without its key would be read from the file and then reported as a
         // key Cowsaver does not know.
-        #expect(Configuration.knownKeys.count == 18)
+        #expect(Configuration.knownKeys.count == 20)
         #expect(Set(Configuration.knownKeys).count == Configuration.knownKeys.count)
     }
 
@@ -830,6 +885,11 @@ struct ConfigurationTests {
 @Suite("Engine")
 struct EngineTests {
     private var resources: URL { GoldenTests.repositoryRoot.appendingPathComponent("Resources") }
+
+    private func balloonMode(of block: String) -> BalloonMode {
+        let lines = block.split(separator: "\n", omittingEmptySubsequences: false)
+        return lines.count > 1 && lines[1].first == "(" ? .think : .say
+    }
 
     private func cowFixtureDirectory(_ names: [String]) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
@@ -1005,6 +1065,49 @@ struct EngineTests {
             return (0 ..< 10).map { _ in engine.nextBlock() }
         }
         #expect(blocks(seed: 100) != blocks(seed: 200))
+    }
+
+    @Test func randomBalloonSelectionIsSeededIncludesBothStylesAndAllowsRepeats() {
+        var configuration = Configuration()
+        configuration.balloonStyle = "random"
+        configuration.randomCow = false
+        configuration.cowfiles = ["default"]
+
+        func modes(seed: UInt64) -> [BalloonMode] {
+            let engine = CowsaverEngine(
+                configuration: configuration,
+                cowDirectories: [resources.appendingPathComponent("cows")],
+                fortuneDirectories: [resources.appendingPathComponent("fortune-curated")],
+                seed: seed
+            )
+            return (0 ..< 40).map { _ in balloonMode(of: engine.nextBlock()) }
+        }
+
+        let first = modes(seed: 2468)
+        #expect(first == modes(seed: 2468), "the same seed reproduces the balloon sequence")
+        #expect(Set(first.map(\.rawValue)) == ["say", "think"])
+        #expect(zip(first, first.dropFirst()).contains { $0.0 == $0.1 },
+                "independent equal-probability choices permit adjacent repeats")
+    }
+
+    @Test func adaptiveCandidatesSpendOnlyOneRandomBalloonChoicePerBlock() {
+        var configuration = Configuration()
+        configuration.balloonStyle = "random"
+        configuration.randomCow = false
+        configuration.cowfiles = ["stegosaurus"]
+        let directory = resources.appendingPathComponent("cows")
+        let fortunes = resources.appendingPathComponent("fortune-curated")
+        let plain = CowsaverEngine(configuration: configuration, cowDirectories: [directory],
+                                   fortuneDirectories: [fortunes], seed: 97531)
+        let adaptive = CowsaverEngine(configuration: configuration, cowDirectories: [directory],
+                                      fortuneDirectories: [fortunes], seed: 97531)
+        let canvas = AdaptiveWrap.Canvas(aspectRatio: 16.0 / 10.0, cellAspectRatio: 0.52)
+
+        for rotation in 0 ..< 20 {
+            #expect(balloonMode(of: plain.nextBlock()) ==
+                    balloonMode(of: adaptive.nextBlock(fitting: canvas)),
+                    "rotation \(rotation) must use the one block-level choice")
+        }
     }
 
     @Test func neverReturnsAnEmptyBlock() {

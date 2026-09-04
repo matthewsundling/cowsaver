@@ -26,6 +26,9 @@ public final class CowsaverEngine {
     private let configuration: Configuration
     private var fortunePicker: NoRepeatSelector<Fortune>
     private var cowPicker: NoRepeatSelector<Cowfile>
+    /// Kept separate from both content selectors so enabling random balloons cannot move the
+    /// established seeded cow or fortune sequences.
+    private var balloonGenerator: SplitMix64
     private let fixedCow: Cowfile?
     public private(set) var diagnostics: Diagnostics
 
@@ -96,6 +99,7 @@ public final class CowsaverEngine {
         self.cowPicker = NoRepeatSelector(elements: enabled,
                                           historyLimit: min(5, enabled.count - 1),
                                           seed: seed &* 31)
+        self.balloonGenerator = SplitMix64(seed: seed ^ 0xD1B5_4A32_D192_ED03)
 
         // --- Fortunes -----------------------------------------------------------
         let loaded = FortuneDatabase.load(directories: fortuneDirectories,
@@ -166,8 +170,18 @@ public final class CowsaverEngine {
         if preview { return Self.previewBlock }
         let fortune = fortunePicker.next()?.text ?? BuiltIn.fortunes[0]
         let cow = fixedCow ?? cowPicker.next() ?? BuiltIn.defaultCow
-        let block = bestBlock(fortune: fortune, cow: cow, canvas: canvas)
+        // Pick once per generated block. Adaptive wrapping may render several candidates, but
+        // every candidate must compare the same balloon rather than spending another choice.
+        let balloonMode = nextBalloonMode()
+        let block = bestBlock(fortune: fortune, cow: cow, mode: balloonMode, canvas: canvas)
         return block.isEmpty ? fallbackBlock() : block
+    }
+
+    private func nextBalloonMode() -> BalloonMode {
+        guard configuration.balloonStyle.lowercased() == "random" else {
+            return configuration.balloonMode
+        }
+        return balloonGenerator.next() & 1 == 0 ? .say : .think
     }
 
     /// Compact deterministic content for a host preview pane.
@@ -184,7 +198,7 @@ public final class CowsaverEngine {
     )
 
     /// Render `fortune` in `cow` at whichever candidate wrap width fills `canvas` best.
-    private func bestBlock(fortune: String, cow: Cowfile,
+    private func bestBlock(fortune: String, cow: Cowfile, mode: BalloonMode,
                            canvas: AdaptiveWrap.Canvas?) -> String {
         let base = configuration.effectiveWrapWidth
 
@@ -192,8 +206,8 @@ public final class CowsaverEngine {
             let bytes = CowRenderer.render(CowsayRequest(
                 message: Message.linesFromStdin(Bytes.from(fortune)),
                 cowfile: cow,
-                mode: configuration.balloonMode,
-                face: Face.construct(modes: configuration.faceModes),
+                mode: mode,
+                face: configuration.resolvedFace,
                 wrapColumns: columns
             ))
             // `String(decoding:as:)` always returns a displayable string. The normal resource
