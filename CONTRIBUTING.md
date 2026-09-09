@@ -12,7 +12,7 @@ toolchain that supplies Swift Testing.
 make check             # source-boundary checks
 make test              # full Swift Testing suite, including the golden fixtures
 make smoke             # framework-free byte comparison of the 219 golden fixtures
-make test-diagnostics  # tests the host-log diagnostic tools
+make test-diagnostics  # tests the host-log and GPU diagnostic tools
 make                   # builds Cowsaver.saver and Cowsaver.app
 make doctor            # build environment and installed-saver metadata
 ```

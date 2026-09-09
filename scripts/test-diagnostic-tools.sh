@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Deterministic checks for the diagnostic commands. All host-facing commands are supplied
-# by PATH stubs so this script does not read unified logs or user diagnostics.
+# Deterministic checks for the diagnostic commands. Host-facing commands are supplied by
+# stubs so this script does not read live GPU data, unified logs, or user diagnostics.
 
 set -euo pipefail
 
@@ -199,5 +199,7 @@ PATH="$SAFE_PATH" bash "$ROOT/scripts/watch-host-logs.sh" --all > "$watch_all" 2
 assert_contains "$watch_all" 'WARNING: --all displays broad screensaver-host and System Settings activity'
 assert_contains "$watch_all" 'unrelated host activity'
 assert_contains "$watch_all" 'unrelated fixture output'
+
+bash "$ROOT/scripts/test-gpu-check.sh"
 
 echo "diagnostic tooling tests: ok"

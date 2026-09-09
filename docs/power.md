@@ -25,7 +25,16 @@ To repeat the discrete-GPU comparison:
 scripts/gpu-check.sh
 ```
 
-Quit other applications first. The script samples the desktop and then Cowsaver, compares medians, and exits 0 for pass, 1 for fail, or 2 when the desktop control is already too busy to support a conclusion. Record the model, macOS version, display arrangement, and whether the machine has a discrete GPU with any result.
+The script classifies Apple and AGX accelerators as unified, Intel accelerators as integrated,
+and AMD, ATI, Radeon, and NVIDIA accelerators as discrete. Apple unified and integrated-only
+systems exit successfully without launching Cowsaver because no discrete-GPU comparison applies.
+Unknown hardware or missing utilization readings produce an inconclusive result rather than being
+treated as a discrete GPU or a zero-percent reading.
+
+Quit other applications first. When a recognized discrete GPU is present, the script samples the
+desktop and then Cowsaver and compares the discrete readings' medians. It exits 0 for pass or not
+applicable, 1 for fail, or 2 when the hardware or readings cannot support a conclusion. Record the
+model, macOS version, display arrangement, and reported GPU classes with any result.
 
 ## Runtime behavior
 
@@ -47,4 +56,6 @@ The standalone app shares the same renderer and rotation coordinator when it is 
 - `make check` verifies that the excluded GPU-rendering frameworks are not imported.
 - `swift test` covers the rotation coordinator's shared-timer, pruning, and cancellation behavior.
 - In Activity Monitor, observe the installed saver between content rotations and record the OS, machine, and display configuration with the observation.
-- On a dual-GPU Mac, run `scripts/gpu-check.sh`; it tests whether reported discrete-GPU utilization rises materially above an idle-desktop control.
+- Run `scripts/gpu-check.sh` to inventory the reported GPU classes. On a Mac with a recognized
+  discrete GPU, it tests whether that GPU's reported utilization rises materially above an
+  idle-desktop control.
