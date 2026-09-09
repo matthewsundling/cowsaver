@@ -55,6 +55,20 @@ struct ConfigurationSheetTests {
                            maximumContentHeight: cap, persister: persister) { _ in }
     }
 
+    private func matches(_ actual: NSColor?, _ expected: ThemeColor) -> Bool {
+        guard let actual = actual?.usingColorSpace(.sRGB) else { return false }
+        let tolerance = 0.001
+        return abs(actual.redComponent - expected.red) < tolerance
+            && abs(actual.greenComponent - expected.green) < tolerance
+            && abs(actual.blueComponent - expected.blue) < tolerance
+            && abs(actual.alphaComponent - 1) < tolerance
+    }
+
+    private func previewBackground(_ sheet: ConfigurationSheet) -> NSColor? {
+        guard let color = sheet.previewContainer.layer?.backgroundColor else { return nil }
+        return NSColor(cgColor: color)
+    }
+
     @Test func buildsItsControlsFromTheConfiguration() {
         var configuration = Configuration()
         configuration.rotationSeconds = 12
@@ -73,6 +87,54 @@ struct ConfigurationSheetTests {
         #expect(sheet.facePopup.titleOfSelectedItem == "-t Tired (--)")
         #expect(sheet.repositionBox.state == .off)
         #expect(sheet.cowfileBoxes.filter { $0.state == .on }.map(\.title) == ["dragon", "tux"])
+    }
+
+    @Test func previewStartsWithTheDefaultThemeColors() {
+        let sheet = makeSheet(saving: Saved())
+        let defaults = Configuration()
+
+        #expect(matches(sheet.previewField.textColor, defaults.resolvedForeground))
+        #expect(matches(previewBackground(sheet), defaults.resolvedBackground))
+    }
+
+    @Test func everyNamedThemeUpdatesBothPreviewColors() throws {
+        let sheet = makeSheet(saving: Saved())
+
+        for preset in ThemePreset.all {
+            sheet.themePopup.selectItem(withTitle: preset.name)
+            sheet.themeChanged()
+
+            let foreground = try #require(ThemeColor(hex: preset.foreground))
+            let background = try #require(ThemeColor(hex: preset.background))
+            #expect(matches(sheet.previewField.textColor, foreground), "\(preset.name) foreground")
+            #expect(matches(previewBackground(sheet), background), "\(preset.name) background")
+        }
+    }
+
+    @Test func previewContainerPreservesSizePaddingAccessibilityAndCappedContainment() throws {
+        let sheet = makeSheet(cappedAt: 500)
+        let content = try #require(sheet.window.contentView)
+        content.layoutSubtreeIfNeeded()
+        sheet.previewContainer.layoutSubtreeIfNeeded()
+
+        #expect(sheet.previewContainer.wantsLayer)
+        #expect(sheet.previewContainer.isOpaque)
+        #expect(sheet.previewContainer.layer?.backgroundColor?.alpha == 1)
+        #expect(sheet.previewContainer.bounds.size == NSSize(width: 420, height: 145))
+        #expect(sheet.previewField.frame == NSRect(x: 2, y: 3, width: 416, height: 140))
+        #expect(sheet.previewContainer.bounds.contains(sheet.previewField.frame))
+        #expect(!sheet.previewField.isEditable)
+        #expect(!sheet.previewField.isSelectable)
+        #expect(!sheet.previewField.isBezeled)
+        #expect(!sheet.previewField.drawsBackground)
+        #expect(sheet.previewField.alignment == .left)
+        #expect(sheet.previewField.accessibilityLabel() == "Preview")
+
+        sheet.previewContainer.scrollToVisible(sheet.previewContainer.bounds)
+        content.layoutSubtreeIfNeeded()
+        let visibleFrame = sheet.previewContainer.convert(sheet.previewContainer.bounds, to: content)
+        #expect(content.bounds.contains(visibleFrame),
+                "preview at \(visibleFrame) is outside the capped window's \(content.bounds)")
     }
 
     @Test func sectionsAreTitledAndOrderedWithCowControlsTogether() throws {
@@ -520,6 +582,45 @@ struct ConfigurationSheetTests {
         #expect(result.background == "123456")
     }
 
+    @Test func validTypedCustomColorsUpdateBothPreviewColors() throws {
+        let sheet = makeSheet(saving: Saved())
+        sheet.themePopup.selectItem(withTitle: "custom colors")
+        sheet.themeChanged()
+
+        sheet.foregroundField.stringValue = "#123456"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.foregroundField))
+        #expect(matches(sheet.previewField.textColor,
+                        try #require(ThemeColor(hex: "#123456"))))
+
+        sheet.backgroundField.stringValue = "#E0D0C0"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.backgroundField))
+        #expect(matches(previewBackground(sheet),
+                        try #require(ThemeColor(hex: "#E0D0C0"))))
+    }
+
+    @Test func invalidCustomDraftKeepsTheLastValidPreviewColorAndBlocksSaving() throws {
+        let persistence = Persistence()
+        let sheet = makeSheet(persister: persistence.persist, saving: Saved())
+        sheet.themePopup.selectItem(withTitle: "custom colors")
+        sheet.themeChanged()
+        sheet.backgroundField.stringValue = "#123456"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.backgroundField))
+        let lastValid = try #require(ThemeColor(hex: "#123456"))
+        #expect(matches(previewBackground(sheet), lastValid))
+
+        sheet.backgroundField.stringValue = "not a color"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+                                                object: sheet.backgroundField))
+
+        #expect(matches(previewBackground(sheet), lastValid))
+        sheet.save()
+        #expect(persistence.calls.isEmpty)
+        #expect(sheet.errorLabel.stringValue.contains("Background"))
+    }
+
     @Test func invalidVisibleCustomColorBlocksSaveAndFocusesItsField() {
         let persistence = Persistence()
         let sheet = makeSheet(persister: persistence.persist, saving: Saved())
@@ -563,6 +664,13 @@ struct ConfigurationSheetTests {
 
         #expect(sheet.foregroundField.stringValue == "#1A80FF")
         #expect(abs(sheet.previewField.textColor!.redComponent - 26.0 / 255.0) < 0.001)
+
+        sheet.backgroundWell.color = NSColor(srgbRed: 0.75, green: 0.25, blue: 0.5, alpha: 0.2)
+        sheet.colorWellChanged(sheet.backgroundWell)
+        #expect(sheet.backgroundField.stringValue == "#BF4080")
+        #expect(matches(previewBackground(sheet), ThemeColor(red: 191.0 / 255.0,
+                                                             green: 64.0 / 255.0,
+                                                             blue: 128.0 / 255.0)))
     }
 
     @Test func typedColorsSynchronizeTheirWells() {
@@ -784,6 +892,22 @@ struct ConfigurationSheetTests {
         #expect(result.adaptiveWrap == Configuration().adaptiveWrap)
         #expect(result.sizeVariation == Configuration().sizeVariation)
         #expect(result.transition == Configuration().transition)
+    }
+
+    @Test func restoreDefaultsRestoresPreviewColorsWithoutPersisting() {
+        var amber = Configuration()
+        amber.theme = "amber"
+        let persistence = Persistence()
+        let sheet = makeSheet(amber, persister: persistence.persist, saving: Saved())
+        #expect(matches(sheet.previewField.textColor, amber.resolvedForeground))
+        #expect(matches(previewBackground(sheet), amber.resolvedBackground))
+
+        sheet.apply(Configuration())
+
+        let defaults = Configuration()
+        #expect(persistence.calls.isEmpty)
+        #expect(matches(sheet.previewField.textColor, defaults.resolvedForeground))
+        #expect(matches(previewBackground(sheet), defaults.resolvedBackground))
     }
 
     @Test func restoreDefaultsClearsAStaleValidationMessage() {
