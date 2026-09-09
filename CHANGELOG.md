@@ -22,6 +22,11 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   candidates.
 - Settings section headings are bracketed and separated with additional whitespace.
 
+### Fixed
+
+- The GPU diagnostic now distinguishes Apple unified graphics from integrated and discrete GPUs,
+  and reports unknown hardware or missing utilization readings as inconclusive.
+
 ## [1.1] - 2026-08-23
 
 ### Added
