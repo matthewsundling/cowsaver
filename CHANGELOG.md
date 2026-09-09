@@ -61,8 +61,9 @@ All notable project changes are recorded here. The format loosely follows [Keep 
   fortune loader recovery events (an oversized, unreadable, or invalid file; an exhausted limit)
   are now surfaced through one consistently logged sequence on every engine creation, Options
   save, and activation-time reload, not only the first.
-- Tahoe host geometry and Options-sheet behavior are diagnosed in the compatibility notes, with
-  application-side defenses awaiting direct Tahoe verification rather than a Tahoe support claim.
+- Tahoe's window-fitting defense is directly verified on one built-in display. Compatibility notes
+  separately record the remaining settings, clock-overlap, GPU-diagnostic, testing, and
+  external-display gaps without making a Tahoe support claim.
 
 ### Fixed
 
