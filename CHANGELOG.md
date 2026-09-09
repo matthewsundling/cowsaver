@@ -26,6 +26,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 - The GPU diagnostic now distinguishes Apple unified graphics from integrated and discrete GPUs,
   and reports unknown hardware or missing utilization readings as inconclusive.
+- The settings preview paints theme and custom backgrounds independently of text-field cell
+  behavior.
 
 ## [1.1] - 2026-08-23
 

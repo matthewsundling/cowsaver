@@ -3,6 +3,35 @@ import CowsayKit
 import Foundation
 import os.log
 
+/// Paints the preview independently of `NSTextFieldCell`, whose background is ignored by the
+/// Tahoe System Settings host. The text field inside this view remains purely transparent text.
+private final class PreviewContainerView: NSView {
+    override var isOpaque: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureLayer()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureLayer()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        layer?.borderColor = NSColor.separatorColor.cgColor
+    }
+
+    private func configureLayer() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        setAccessibilityElement(false)
+    }
+}
+
 /// The settings window shared by both front ends: the saver presents it as its ScreenSaver
 /// Options sheet, and `Cowsaver.app` presents it as an ordinary window.
 ///
@@ -29,6 +58,8 @@ public final class ConfigurationSheet: NSObject {
     var foregroundWell: NSColorWell!
     var backgroundWell: NSColorWell!
     var facePopup: NSPopUpButton!
+    /// Owns the preview background and border; internal so tests can verify live painting.
+    var previewContainer: NSView!
     var previewField: NSTextField!
     var adaptiveWrapBox: NSButton!
     var randomCowBox: NSButton!
@@ -188,14 +219,32 @@ public final class ConfigurationSheet: NSObject {
         facePopup.target = self
         facePopup.action = #selector(faceChanged)
 
+        previewContainer = PreviewContainerView()
+        previewContainer.translatesAutoresizingMaskIntoConstraints = false
         previewField = NSTextField(wrappingLabelWithString: "")
         previewField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        previewField.isEditable = false
         previewField.isSelectable = false
-        previewField.drawsBackground = true
-        previewField.isBezeled = true
+        previewField.drawsBackground = false
+        previewField.isBezeled = false
         previewField.alignment = .left
-        previewField.widthAnchor.constraint(equalToConstant: width - 40).isActive = true
-        previewField.heightAnchor.constraint(equalToConstant: 145).isActive = true
+        previewField.setAccessibilityLabel("Preview")
+        previewField.translatesAutoresizingMaskIntoConstraints = false
+        previewContainer.addSubview(previewField)
+        NSLayoutConstraint.activate([
+            previewContainer.widthAnchor.constraint(equalToConstant: width - 40),
+            previewContainer.heightAnchor.constraint(equalToConstant: 145),
+            // Match the title rectangle of the previous 420x145 bezeled text field. AppKit's
+            // horizontal alignment rect is inset two points from an NSTextField's frame, so
+            // four-point anchor constants produce the intended two-point frame inset.
+            previewField.leadingAnchor.constraint(equalTo: previewContainer.leadingAnchor,
+                                                  constant: 4),
+            previewField.trailingAnchor.constraint(equalTo: previewContainer.trailingAnchor,
+                                                   constant: -4),
+            previewField.topAnchor.constraint(equalTo: previewContainer.topAnchor, constant: 2),
+            previewField.bottomAnchor.constraint(equalTo: previewContainer.bottomAnchor,
+                                                 constant: -3),
+        ])
 
         adaptiveWrapBox = checkbox("Optimize balloon width for the screen", on: false)
         randomCowBox = checkbox("Random cow each rotation", on: false)
@@ -242,7 +291,7 @@ public final class ConfigurationSheet: NSObject {
             every other mode uses the default tongue.
             """, width: width))
         stack.addArrangedSubview(NSTextField(labelWithString: "Preview"))
-        stack.addArrangedSubview(previewField)
+        stack.addArrangedSubview(previewContainer)
 
         addSectionTitle("Placement and Sizing", to: stack)
         stack.addArrangedSubview(repositionBox)
@@ -837,12 +886,10 @@ public final class ConfigurationSheet: NSObject {
         var preview = configuration
         let selectedTheme = themePopup.titleOfSelectedItem
         preview.theme = selectedTheme == customColorsTitle ? nil : selectedTheme
-        if ThemeColor(hex: foregroundField.stringValue) != nil {
-            preview.foreground = foregroundField.stringValue
-        }
-        if ThemeColor(hex: backgroundField.stringValue) != nil {
-            preview.background = backgroundField.stringValue
-        }
+        preview.foreground = ThemeColor(hex: foregroundField.stringValue) == nil
+            ? lastValidForeground : foregroundField.stringValue
+        preview.background = ThemeColor(hex: backgroundField.stringValue) == nil
+            ? lastValidBackground : backgroundField.stringValue
         preview.balloonStyle = stylePopup.titleOfSelectedItem ?? "say"
         preview.face = selectedFaceValue()
         let renderedFace = preview.wantsRandomFace ? previewRandomFace : preview.resolvedFace
@@ -852,7 +899,7 @@ public final class ConfigurationSheet: NSObject {
                                        wrapColumns: 40)
         previewField.stringValue = String(decoding: bytes, as: UTF8.self)
         previewField.textColor = NSColor(preview.resolvedForeground)
-        previewField.backgroundColor = NSColor(preview.resolvedBackground)
+        previewContainer.layer?.backgroundColor = NSColor(preview.resolvedBackground).cgColor
     }
 
     /// One complete, valid cowsay face for the Settings preview. The engine owns the seeded
