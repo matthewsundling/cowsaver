@@ -38,9 +38,10 @@ struct ConfigurationSheetTests {
 
     private func makeSheet(_ configuration: Configuration = Configuration(),
                            persister: @escaping (Configuration) -> SaveOutcome = { _ in .saved },
+                           closing onClose: @escaping () -> Void = {},
                            saving saved: Saved) -> ConfigurationSheet {
         ConfigurationSheet(configuration: configuration, cowfileNames: cowfileNames,
-                           persister: persister) {
+                           persister: persister, onClose: onClose) {
             saved.configuration = $0
             saved.callCount += 1
         }
@@ -470,12 +471,15 @@ struct ConfigurationSheetTests {
     @Test func aFailedAttemptFollowedByASuccessfulRetryPreservesEditsAndSucceedsOnce() throws {
         let persistence = Persistence([.failed("disk full"), .saved])
         let saved = Saved()
-        let sheet = makeSheet(persister: persistence.persist, saving: saved)
+        var closeCount = 0
+        let sheet = makeSheet(persister: persistence.persist,
+                              closing: { closeCount += 1 }, saving: saved)
         sheet.rotationField.stringValue = "99"
 
         sheet.save()
         #expect(sheet.rotationField.stringValue == "99", "the first attempt's edit survives")
         #expect(!sheet.errorLabel.isHidden)
+        #expect(closeCount == 0, "a failed save keeps the settings window open")
 
         sheet.save()
 
@@ -485,12 +489,15 @@ struct ConfigurationSheetTests {
         #expect(saved.callCount == 1, "only the successful attempt reaches the consumer")
         #expect(try #require(saved.configuration).rotationSeconds == 99)
         #expect(sheet.errorLabel.isHidden, "a later successful save clears the earlier error")
+        #expect(closeCount == 1, "a successful retry closes the settings window once")
     }
 
     @Test func cancelPersistsNothingAndCallsNoConsumer() {
         let persistence = Persistence()
         let saved = Saved()
-        let sheet = makeSheet(persister: persistence.persist, saving: saved)
+        var closeCount = 0
+        let sheet = makeSheet(persister: persistence.persist,
+                              closing: { closeCount += 1 }, saving: saved)
         sheet.rotationField.stringValue = "99"
 
         _ = sheet.perform(NSSelectorFromString("cancel"))
@@ -498,6 +505,7 @@ struct ConfigurationSheetTests {
         #expect(persistence.calls.isEmpty)
         #expect(saved.callCount == 0)
         #expect(saved.configuration == nil)
+        #expect(closeCount == 1, "Cancel closes the settings window once")
     }
 
     // MARK: - Numeric validation
