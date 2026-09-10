@@ -48,6 +48,7 @@ public final class ConfigurationSheet: NSObject {
     /// Called exactly once per successful save, after persistence has already succeeded.
     /// Never called for an invalid or unpersisted attempt.
     private let onSave: (Configuration) -> Void
+    private let onClose: () -> Void
 
     // Controls are internal so the round-trip test can drive them.
     var rotationField: NSTextField!
@@ -131,9 +132,11 @@ public final class ConfigurationSheet: NSObject {
     private var presentationScreenHint: NSScreen?
 
     public convenience init(configuration: Configuration,
+                            onClose: @escaping () -> Void = {},
                             onSave: @escaping (Configuration) -> Void) {
         self.init(configuration: configuration,
                   cowfileNames: Self.bundledCowfileNames(),
+                  onClose: onClose,
                   onSave: onSave)
     }
 
@@ -149,9 +152,11 @@ public final class ConfigurationSheet: NSObject {
          cowfileNames: [String],
          maximumContentHeight: CGFloat? = nil,
          persister: @escaping (Configuration) -> SaveOutcome = ConfigurationSheet.writeToDisk,
+         onClose: @escaping () -> Void = {},
          onSave: @escaping (Configuration) -> Void) {
         self.configuration = configuration
         self.persister = persister
+        self.onClose = onClose
         self.onSave = onSave
         super.init()
         buildWindow(cowfileNames: cowfileNames, maximumContentHeight: maximumContentHeight)
@@ -763,11 +768,9 @@ public final class ConfigurationSheet: NSObject {
         if let parent = window.sheetParent {
             parent.endSheet(window)
         } else {
-            // End only a modal session this window owns. Stopping one it does not own would
-            // interrupt whatever loop is actually running.
-            if NSApp?.modalWindow === window { NSApp.stopModal() }
             window.orderOut(nil)
         }
+        onClose()
     }
 
     private static let logger = Logger(subsystem: "com.matthewsundling.cowsaver", category: "sheet")

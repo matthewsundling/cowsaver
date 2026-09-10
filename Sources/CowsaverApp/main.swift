@@ -212,10 +212,8 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         case .configure:
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
-            // Leave the launch callback before running a modal loop in it.
             DispatchQueue.main.async { [weak self] in
                 self?.presentSettings()
-                NSApp.terminate(nil)
             }
         case .renderPNG:
             break   // handled above
@@ -450,10 +448,16 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
 
     @objc private func showSettings() { presentSettings() }
 
-    /// The shared sheet, shown as an ordinary window. Running it modally matches how its
-    /// Cancel and OK buttons close it when it has no sheet parent.
+    /// Shows the shared settings as an ordinary app window.
     private func presentSettings() {
-        let sheet = ConfigurationSheet(configuration: configuration) { [weak self] updated in
+        if let settings {
+            settings.window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let sheet = ConfigurationSheet(configuration: configuration, onClose: { [weak self] in
+            self?.settingsDidClose()
+        }) { [weak self] updated in
             self?.applySaved(updated)
         }
         // This is only the initial hint: no sheet parent ever attaches in this standalone
@@ -466,8 +470,13 @@ final class AppController: NSObject, NSApplicationDelegate, RotationClient {
         settings = sheet   // nothing else retains it while it is on screen
         sheet.window.center()
         sheet.window.makeKeyAndOrderFront(nil)
-        NSApp.runModal(for: sheet.window)
+    }
+
+    private func settingsDidClose() {
         settings = nil
+        if case .configure = mode {
+            NSApp.terminate(nil)
+        }
     }
 
     /// The sheet has already validated and written `config.json` by the time this runs.

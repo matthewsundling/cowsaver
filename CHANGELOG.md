@@ -24,6 +24,8 @@ All notable project changes are recorded here. The format loosely follows [Keep 
 
 ### Fixed
 
+- Standalone settings now use the app's normal event loop, keeping scrolling responsive on
+  Sequoia and Tahoe.
 - The GPU diagnostic now distinguishes Apple unified graphics from integrated and discrete GPUs,
   and reports unknown hardware or missing utilization readings as inconclusive.
 - The settings preview paints theme and custom backgrounds independently of text-field cell
